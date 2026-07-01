@@ -77,29 +77,19 @@ export function getProjectTitleFromFilename(filename: string) {
 }
 
 export async function readGeneratedImages() {
-  const response = await fetch("/api/canvas/generated-images", { cache: "no-store" });
-  if (!response.ok) return [];
-  const payload = (await response.json()) as { images?: GeneratedImageBackup[] };
-  return Array.isArray(payload.images) ? payload.images : [];
+  const { readClientGeneratedImages } = await import("@/lib/clientGeneratedImages");
+  return readClientGeneratedImages();
 }
 
 export async function replaceGeneratedImages(images: GeneratedImageBackup[]) {
-  const response = await fetch("/api/canvas/generated-images", {
-    body: JSON.stringify({ images }),
-    headers: { "Content-Type": "application/json" },
-    method: "PUT"
-  });
-  if (!response.ok) throw new Error("AI 返图同步失败。");
+  const { writeClientGeneratedImages } = await import("@/lib/clientGeneratedImages");
+  writeClientGeneratedImages(images);
   window.dispatchEvent(new CustomEvent("ai-canvas-generated-images-updated"));
 }
 
 export async function clearGeneratedImages() {
-  const response = await fetch("/api/canvas/generated-images", {
-    body: JSON.stringify({}),
-    headers: { "Content-Type": "application/json" },
-    method: "DELETE"
-  });
-  if (!response.ok) throw new Error("AI 返图清理失败。");
+  const { removeClientGeneratedImages } = await import("@/lib/clientGeneratedImages");
+  removeClientGeneratedImages([]);
   window.dispatchEvent(new CustomEvent("ai-canvas-generated-images-updated"));
 }
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Image as ImageIcon, SendHorizontal, Trash2, X } from "lucide-react";
 import { useCanvasStore } from "@/store/canvasStore";
+import { readClientGeneratedImages, removeClientGeneratedImages } from "@/lib/clientGeneratedImages";
 import { downloadImageToFile } from "@/lib/downloadImage";
 
 interface GeneratedImageItem {
@@ -54,11 +55,7 @@ export function GeneratedImagesPanel() {
   const hydrateImages = useCallback(async () => {
     if (!open) return;
     try {
-      await fetch("/api/ai/recover-images", { cache: "no-store", method: "POST" });
-      const response = await fetch("/api/canvas/generated-images", { cache: "no-store" });
-      if (!response.ok) return;
-      const payload = (await response.json()) as { images?: GeneratedImageItem[] };
-      setImages([...(payload.images ?? [])].reverse());
+      setImages([...readClientGeneratedImages()].reverse());
       setStatus("");
     } catch {
       setStatus("无法读取 AI 返图备份。");
@@ -133,20 +130,9 @@ export function GeneratedImagesPanel() {
 
   const removeImages = useCallback((ids: string[]) => {
     if (!ids.length) return;
-    void (async () => {
-      const response = await fetch("/api/canvas/generated-images", {
-        body: JSON.stringify({ ids }),
-        headers: { "Content-Type": "application/json" },
-        method: "DELETE"
-      });
-      const payload = (await response.json()) as { images?: GeneratedImageItem[]; error?: string };
-      if (!response.ok) {
-        setStatus(payload.error || "清理失败。");
-        return;
-      }
-      setImages([...(payload.images ?? [])].reverse());
-      setStatus(ids.length > 1 ? "已清理全部 AI 返图备份。" : "已删除这张 AI 返图备份。");
-    })();
+    const next = removeClientGeneratedImages(ids);
+    setImages([...next].reverse());
+    setStatus(ids.length > 1 ? "已清理全部 AI 返图备份。" : "已删除这张 AI 返图备份。");
   }, []);
 
   const downloadOne = async (item: GeneratedImageItem) => {

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Edge, Node, Viewport, XYPosition } from "@xyflow/react";
 import { getClientAiSettingsPayload } from "@/lib/clientAiSettings";
+import { addClientGeneratedImages } from "@/lib/clientGeneratedImages";
 import { defaultIndustrialDesignImageModelId, defaultProductRemixModelId, defaultSceneImageModelId, getDefaultIndustrialDesignImageParams, getDefaultProductRemixParams, getDefaultSceneImageParams, getReferenceImageLimit } from "@/lib/generateImageModels";
 import { nodeLabels, type CanvasNodeData, type NodeKind } from "@/lib/nodeTypes";
 import { nextZIndex } from "@/lib/zIndex";
@@ -2190,6 +2191,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const current = get().nodes.find((node) => node.id === id);
       if (current?.data.generationId !== generationId || current.data.runState !== "running") return;
       if (!images.length) throw new Error("AI 服务没有返回图片。");
+      addClientGeneratedImages(images.map((image) => ({
+        imageUrl: image.url,
+        modelId,
+        prompt: requestPrompt,
+        sourceNodeId: id
+      })));
     } catch (error) {
       generationControllers.delete(id);
       set((state) => ({
@@ -2417,6 +2424,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         .filter(Boolean)
         .slice(0, Math.min(6, Math.max(1, Number.parseInt(source.data.modelParams?.imageCount ?? "1", 10) || 1)));
       if (!imageUrls.length) throw new Error("AI 服务没有返回视觉规范图。");
+      addClientGeneratedImages(imageUrls.map((imageUrl) => ({
+        imageUrl,
+        modelId: visualModel,
+        prompt: boardPrompt,
+        sourceNodeId: id
+      })));
       generationControllers.delete(id);
 
       set((state) => {
