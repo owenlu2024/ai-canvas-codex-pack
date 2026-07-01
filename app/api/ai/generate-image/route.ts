@@ -9,11 +9,14 @@ import { assertSafeRemoteFetchUrl, normalizeHttpBaseUrl } from "@/lib/urlSafety"
 
 interface GenerateImageRequest {
   aiSettings?: StoredApiSettings;
+  expectedCount?: number;
   model?: string;
+  mode?: "submit" | "poll";
   prompt?: string;
   params?: Record<string, string>;
   images?: string[];
   sourceNodeId?: string;
+  taskIds?: string[];
 }
 
 interface ProviderImage {
@@ -39,6 +42,8 @@ const deletedGeneratedImagesPath = getCanvasDataPath("generated-images-deleted.l
 const taskRecoveryPath = getCanvasDataPath("ai-task-recovery.local.json");
 const generationTimeoutMs = 30 * 60 * 1000;
 const agnesDirectTimeoutMs = 3 * 60 * 1000;
+
+export const maxDuration = 60;
 
 function getImageKey(imageUrl: string) {
   return createHash("sha256").update(imageUrl).digest("hex");
@@ -759,38 +764,43 @@ function normalizeDeletedGeneratedImagesFile(value: Partial<DeletedGeneratedImag
 }
 
 async function appendGeneratedImageBackups(images: Array<{ url: string }>, details: { model: string; prompt: string; sourceNodeId?: string }) {
-  if (!images.length) return 0;
-  let current = normalizeGeneratedImagesFile({ images: [] });
-  let deleted = normalizeDeletedGeneratedImagesFile({ imageKeys: [] });
   try {
-    current = normalizeGeneratedImagesFile(JSON.parse(await fs.readFile(generatedImagesPath, "utf8")) as Partial<GeneratedImagesFile>);
+    if (!images.length) return 0;
+    let current = normalizeGeneratedImagesFile({ images: [] });
+    let deleted = normalizeDeletedGeneratedImagesFile({ imageKeys: [] });
+    try {
+      current = normalizeGeneratedImagesFile(JSON.parse(await fs.readFile(generatedImagesPath, "utf8")) as Partial<GeneratedImagesFile>);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    try {
+      deleted = normalizeDeletedGeneratedImagesFile(JSON.parse(await fs.readFile(deletedGeneratedImagesPath, "utf8")) as Partial<DeletedGeneratedImagesFile>);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const createdAt = new Date().toISOString();
+    const existingUrls = new Set(current.images.map((image) => image.imageUrl));
+    const deletedKeys = new Set(deleted.imageKeys);
+    const incoming = images
+      .filter((image) => !existingUrls.has(image.url))
+      .filter((image) => !deletedKeys.has(getImageKey(image.url)))
+      .map((image, index) => ({
+        createdAt,
+        id: `generated-backup-${Date.now()}-${index}-${Math.round(Math.random() * 1000)}`,
+        imageUrl: image.url,
+        modelId: details.model,
+        prompt: details.prompt,
+        sourceNodeId: details.sourceNodeId
+      }));
+    if (!incoming.length) return 0;
+    const next = normalizeGeneratedImagesFile({ images: [...current.images, ...incoming] });
+    await fs.mkdir(path.dirname(generatedImagesPath), { recursive: true });
+    await fs.writeFile(generatedImagesPath, `${JSON.stringify({ ...next, savedAt: new Date().toISOString() }, null, 2)}\n`, "utf8");
+    return incoming.length;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    console.warn("[generate-image] backup write skipped", error);
+    return 0;
   }
-  try {
-    deleted = normalizeDeletedGeneratedImagesFile(JSON.parse(await fs.readFile(deletedGeneratedImagesPath, "utf8")) as Partial<DeletedGeneratedImagesFile>);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  const createdAt = new Date().toISOString();
-  const existingUrls = new Set(current.images.map((image) => image.imageUrl));
-  const deletedKeys = new Set(deleted.imageKeys);
-  const incoming = images
-    .filter((image) => !existingUrls.has(image.url))
-    .filter((image) => !deletedKeys.has(getImageKey(image.url)))
-    .map((image, index) => ({
-      createdAt,
-      id: `generated-backup-${Date.now()}-${index}-${Math.round(Math.random() * 1000)}`,
-      imageUrl: image.url,
-      modelId: details.model,
-      prompt: details.prompt,
-      sourceNodeId: details.sourceNodeId
-    }));
-  if (!incoming.length) return 0;
-  const next = normalizeGeneratedImagesFile({ images: [...current.images, ...incoming] });
-  await fs.mkdir(path.dirname(generatedImagesPath), { recursive: true });
-  await fs.writeFile(generatedImagesPath, `${JSON.stringify({ ...next, savedAt: new Date().toISOString() }, null, 2)}\n`, "utf8");
-  return incoming.length;
 }
 
 function normalizeTaskRecoveryFile(value: Partial<AiTaskRecoveryFile>): AiTaskRecoveryFile {
@@ -819,33 +829,41 @@ async function writeTaskRecoveryFile(file: AiTaskRecoveryFile) {
 }
 
 async function upsertRecoveryTask(task: Omit<AiTaskRecoveryRecord, "submittedAt" | "updatedAt" | "status"> & { status?: AiTaskRecoveryRecord["status"] }) {
-  const current = await readTaskRecoveryFile();
-  const now = new Date().toISOString();
-  const existing = current.tasks.find((item) => item.taskId === task.taskId);
-  const nextTask: AiTaskRecoveryRecord = {
-    ...existing,
-    ...task,
-    expectedCount: task.expectedCount,
-    model: task.model,
-    status: task.status ?? existing?.status ?? "submitted",
-    submittedAt: existing?.submittedAt ?? now,
-    updatedAt: now
-  };
-  const nextTasks = existing
-    ? current.tasks.map((item) => (item.taskId === task.taskId ? nextTask : item))
-    : [...current.tasks, nextTask];
-  await writeTaskRecoveryFile({ ...current, tasks: nextTasks.slice(-200) });
+  try {
+    const current = await readTaskRecoveryFile();
+    const now = new Date().toISOString();
+    const existing = current.tasks.find((item) => item.taskId === task.taskId);
+    const nextTask: AiTaskRecoveryRecord = {
+      ...existing,
+      ...task,
+      expectedCount: task.expectedCount,
+      model: task.model,
+      status: task.status ?? existing?.status ?? "submitted",
+      submittedAt: existing?.submittedAt ?? now,
+      updatedAt: now
+    };
+    const nextTasks = existing
+      ? current.tasks.map((item) => (item.taskId === task.taskId ? nextTask : item))
+      : [...current.tasks, nextTask];
+    await writeTaskRecoveryFile({ ...current, tasks: nextTasks.slice(-200) });
+  } catch (error) {
+    console.warn("[generate-image] recovery task write skipped", error);
+  }
 }
 
 async function updateRecoveryTask(taskId: string, patch: Partial<Omit<AiTaskRecoveryRecord, "taskId" | "submittedAt">>) {
-  const current = await readTaskRecoveryFile();
-  const now = new Date().toISOString();
-  const nextTasks = current.tasks.map((task) => (
-    task.taskId === taskId
-      ? { ...task, ...patch, updatedAt: now }
-      : task
-  ));
-  await writeTaskRecoveryFile({ ...current, tasks: nextTasks });
+  try {
+    const current = await readTaskRecoveryFile();
+    const now = new Date().toISOString();
+    const nextTasks = current.tasks.map((task) => (
+      task.taskId === taskId
+        ? { ...task, ...patch, updatedAt: now }
+        : task
+    ));
+    await writeTaskRecoveryFile({ ...current, tasks: nextTasks });
+  } catch (error) {
+    console.warn("[generate-image] recovery task update skipped", error);
+  }
 }
 
 async function readProviderPayload(response: Response) {
@@ -874,7 +892,7 @@ async function readProviderError(response: Response) {
   }
 }
 
-async function executeAsyncGeneration(settings: ApiSettings, context: SubmitContext, expectedCount: number): Promise<AsyncGenerationResult> {
+async function submitAsyncTask(settings: ApiSettings, context: SubmitContext, expectedCount: number) {
   const submit = await buildAsyncSubmit(context);
   const v1BaseUrl = withV1BaseUrl(settings.baseUrl);
   const endpoint = submit.taskSubmitEndpoint ? `${v1BaseUrl}${submit.taskSubmitEndpoint}` : `${v1BaseUrl}/task/submit`;
@@ -907,7 +925,6 @@ async function executeAsyncGeneration(settings: ApiSettings, context: SubmitCont
   }
 
   const taskEndpoint = `${v1BaseUrl}/task/${encodeURIComponent(taskId)}`;
-  const taskDebug = { ...debug, taskEndpoint, taskId };
   await upsertRecoveryTask({
     expectedCount,
     model: context.model,
@@ -916,9 +933,77 @@ async function executeAsyncGeneration(settings: ApiSettings, context: SubmitCont
     status: "submitted",
     taskId
   });
+  return {
+    contentType: submitContentType,
+    debug: { ...debug, taskEndpoint, taskId },
+    payload: submitResult,
+    taskEndpoint,
+    taskId
+  };
+}
+
+async function pollAsyncTask(settings: ApiSettings, task: { expectedCount: number; model: string; prompt?: string; sourceNodeId?: string; taskId: string }) {
+  const v1BaseUrl = withV1BaseUrl(settings.baseUrl);
+  const taskEndpoint = `${v1BaseUrl}/task/${encodeURIComponent(task.taskId)}`;
+  const taskResponse = await fetch(taskEndpoint, {
+    headers: {
+      Authorization: `Bearer ${settings.apiKey}`,
+      "Content-Type": "application/json"
+    },
+    method: "GET",
+    signal: AbortSignal.timeout(60000)
+  });
+  if (!taskResponse.ok) {
+    const error = await readProviderError(taskResponse);
+    throw new AiProviderError(error, taskResponse.status, { mode: "task-poll", taskEndpoint, taskId: task.taskId }, { responseContentType: taskResponse.headers.get("content-type") });
+  }
+
+  const taskResult = await readProviderPayload(taskResponse);
+  const status = getTaskStatus(taskResult.payload);
+  const images = normalizeImages(taskResult.payload, task.expectedCount);
+  const debug = {
+    mode: "task-poll",
+    status,
+    taskEndpoint,
+    taskId: task.taskId
+  };
+  if (images.length && isSuccessStatus(status)) {
+    await updateRecoveryTask(task.taskId, { completedAt: new Date().toISOString(), images, status: "completed" });
+    return {
+      completed: true,
+      debug,
+      images,
+      responseContentType: taskResult.contentType,
+      responseKeys: getResponseKeys(taskResult.payload)
+    };
+  }
+  if (!images.length && isTerminalSuccessStatus(status)) {
+    await updateRecoveryTask(task.taskId, { completedAt: new Date().toISOString(), error: "AI 任务已完成，但返回内容里没有可用图片。", status: "failed" });
+    throw new AiProviderError("AI 任务已完成，但返回内容里没有可用图片。", 502, debug, { responseContentType: taskResult.contentType, responseKeys: getResponseKeys(taskResult.payload) });
+  }
+  if (["failed", "error", "cancelled", "canceled"].includes(status)) {
+    const error = getTaskError(taskResult.payload) || "AI 任务失败。";
+    await updateRecoveryTask(task.taskId, { completedAt: new Date().toISOString(), error, status: "failed" });
+    throw new AiProviderError(error, 502, debug, { responseContentType: taskResult.contentType, responseKeys: getResponseKeys(taskResult.payload) });
+  }
+  await updateRecoveryTask(task.taskId, { status: "running" });
+  return {
+    completed: false,
+    debug,
+    images: [],
+    responseContentType: taskResult.contentType,
+    responseKeys: getResponseKeys(taskResult.payload)
+  };
+}
+
+async function executeAsyncGeneration(settings: ApiSettings, context: SubmitContext, expectedCount: number): Promise<AsyncGenerationResult> {
+  const submitted = await submitAsyncTask(settings, context, expectedCount);
+  const taskId = submitted.taskId;
+  const taskDebug = submitted.debug;
+  const taskEndpoint = submitted.taskEndpoint;
   const startedAt = Date.now();
-  let taskPayload: unknown = submitResult;
-  let taskContentType: string | null = submitContentType;
+  let taskPayload: unknown = submitted.payload;
+  let taskContentType: string | null = submitted.contentType;
   while (Date.now() - startedAt < generationTimeoutMs) {
     const status = getTaskStatus(taskPayload);
     const images = normalizeImages(taskPayload, expectedCount);
@@ -1071,6 +1156,58 @@ export async function POST(request: NextRequest) {
       prompt,
       sourceNodeId: body.sourceNodeId
     };
+
+    if (body.mode === "submit") {
+      if (isAgnesImageModel(model) || (isGeminiImageModel(model) && !is12AiBaseUrl(settings.baseUrl))) {
+        return NextResponse.json({ error: "当前模型暂不支持异步任务模式。" }, { status: 400 });
+      }
+      const submissions = await Promise.all(Array.from({ length: n }, () => submitAsyncTask(settings, { ...context, n: 1 }, 1)));
+      return NextResponse.json({
+        debug: {
+          mode: "task-submit",
+          taskIds: submissions.map((item) => item.taskId)
+        },
+        expectedCount: n,
+        status: "submitted",
+        taskIds: submissions.map((item) => item.taskId)
+      });
+    }
+
+    if (body.mode === "poll") {
+      const taskIds = (body.taskIds ?? []).filter((taskId): taskId is string => typeof taskId === "string" && Boolean(taskId.trim()));
+      if (!taskIds.length) return NextResponse.json({ error: "缺少任务 ID。" }, { status: 400 });
+      const expectedCount = Math.max(1, Number(body.expectedCount ?? taskIds.length) || taskIds.length);
+      const results = await Promise.all(taskIds.map((taskId) => pollAsyncTask(settings, { expectedCount: 1, model, prompt, sourceNodeId: body.sourceNodeId, taskId })));
+      const images = results.flatMap((result) => result.images).slice(0, expectedCount);
+      const allCompleted = results.every((result) => result.completed);
+      if (!allCompleted || images.length < expectedCount) {
+        return NextResponse.json({
+          debug: {
+            mode: "task-poll",
+            taskIds,
+            statuses: results.map((result) => result.debug.status)
+          },
+          images,
+          status: "running"
+        }, { status: 202 });
+      }
+      const backupSaved = await appendGeneratedImageBackups(images, { model, prompt, sourceNodeId: body.sourceNodeId });
+      await Promise.all(taskIds.map((taskId) => updateRecoveryTask(taskId, { status: "backed_up" })));
+      await writeDebug({
+        at: new Date().toISOString(),
+        backupSaved,
+        debug: {
+          mode: "task-poll",
+          taskIds
+        },
+        imageCount: images.length,
+        responseContentType: results[0]?.responseContentType,
+        responseKeys: results[0]?.responseKeys,
+        responseStatus: 200
+      });
+      return NextResponse.json({ debug: { backupSaved, mode: "task-poll", taskIds }, images, status: "completed" });
+    }
+
     const result = isAgnesImageModel(model)
       ? await executeAgnesGeneration(settings, context, n)
       : isGeminiImageModel(model) && is12AiBaseUrl(settings.baseUrl)

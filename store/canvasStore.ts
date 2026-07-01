@@ -19,6 +19,8 @@ const maxTaobaoPlannerImageInputs = 10;
 const taobaoClientPreviewMaxEdge = 1400;
 const generationControllers = new Map<string, AbortController>();
 const deleteAnimationTimers = new Set<ReturnType<typeof setTimeout>>();
+const hostedImageGenerationMaxWaitMs = 30 * 60 * 1000;
+const hostedImageGenerationPollMs = 5000;
 const defaultAiPromptModel = "gemini-2.5-flash";
 const defaultSceneDirectorModel = "gemini-2.5-flash";
 const defaultTaobaoPageDirectorModel = "gemini-2.5-flash";
@@ -49,6 +51,80 @@ function isRunningLockingNode(node: Node<CanvasNodeData>) {
 
 function edgeTouchesRunningLockingNode(edge: Pick<Edge, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
   return nodes.some((node) => (node.id === edge.source || node.id === edge.target) && isRunningLockingNode(node));
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timer = window.setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
+  });
+}
+
+function getRequestedImageCount(params?: Record<string, string>) {
+  const count = Number(params?.imageCount);
+  return Number.isFinite(count) ? Math.min(6, Math.max(1, Math.round(count))) : 1;
+}
+
+async function requestGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
+  const directResponse = await fetch("/api/ai/generate-image", {
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal: controller.signal
+  });
+  const directText = await directResponse.text();
+  let directPayload: { debug?: { mode?: string; size?: string }; images?: Array<{ url?: string }>; error?: string; expectedCount?: number; status?: string; taskIds?: string[] };
+  try {
+    directPayload = JSON.parse(directText) as { debug?: { mode?: string; size?: string }; images?: Array<{ url?: string }>; error?: string; expectedCount?: number; status?: string; taskIds?: string[] };
+  } catch {
+    const fallback = directText.trim().replace(/\s+/g, " ").slice(0, 160);
+    throw new Error(directResponse.ok ? "AI 服务返回格式异常。" : `AI 生成失败：${directResponse.status}${fallback ? ` ${fallback}` : ""}`);
+  }
+  if (!directResponse.ok && directResponse.status !== 202) throw new Error(directPayload.error || `AI 生成失败：${directResponse.status}`);
+  const directImages = (directPayload.images ?? []).map((image) => ({ url: image.url ?? "" })).filter((image) => Boolean(image.url));
+  if (directImages.length) return directImages;
+
+  const taskIds = directPayload.taskIds ?? [];
+  if (!taskIds.length) throw new Error(directPayload.error || "AI 服务没有返回图片。");
+
+  const expectedCount = Math.max(1, Number(directPayload.expectedCount ?? getRequestedImageCount(body.params as Record<string, string> | undefined)) || taskIds.length);
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < hostedImageGenerationMaxWaitMs) {
+    await delay(hostedImageGenerationPollMs, controller.signal);
+    const pollResponse = await fetch("/api/ai/generate-image", {
+      body: JSON.stringify({
+        aiSettings: body.aiSettings,
+        expectedCount,
+        mode: "poll",
+        model: body.model,
+        prompt: body.prompt,
+        sourceNodeId: body.sourceNodeId,
+        taskIds
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+      signal: controller.signal
+    });
+    const pollText = await pollResponse.text();
+    let pollPayload: { debug?: { mode?: string; size?: string }; images?: Array<{ url?: string }>; error?: string; status?: string };
+    try {
+      pollPayload = JSON.parse(pollText) as { debug?: { mode?: string; size?: string }; images?: Array<{ url?: string }>; error?: string; status?: string };
+    } catch {
+      const fallback = pollText.trim().replace(/\s+/g, " ").slice(0, 160);
+      throw new Error(pollResponse.ok ? "AI 服务返回格式异常。" : `AI 生成失败：${pollResponse.status}${fallback ? ` ${fallback}` : ""}`);
+    }
+    if (!pollResponse.ok && pollResponse.status !== 202) throw new Error(pollPayload.error || `AI 生成失败：${pollResponse.status}`);
+    const images = (pollPayload.images ?? []).map((image) => ({ url: image.url ?? "" })).filter((image) => Boolean(image.url));
+    if (images.length >= expectedCount || (pollResponse.ok && images.length)) return images;
+  }
+  throw new Error("AI 生成超过 30 分钟仍未返回图片，请稍后重试或检查后台任务状态。");
 }
 
 function getNextImageNumber(nodes: Node<CanvasNodeData>[], reserved = new Set<number>()) {
@@ -2100,33 +2176,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         model: modelId,
         sourceNodeId: id
       });
-      const response = await fetch("/api/ai/generate-image", {
-        body: JSON.stringify({
-          aiSettings: getClientAiSettingsPayload(),
-          images: referenceImages.map((node) => node.data.imageUrl).filter((imageUrl): imageUrl is string => Boolean(imageUrl)),
-          model: modelId,
-          params: requestParams,
-          prompt: requestPrompt,
-          sourceNodeId: id
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-        signal: controller.signal
-      });
+      const requestBody = {
+        aiSettings: getClientAiSettingsPayload(),
+        images: referenceImages.map((node) => node.data.imageUrl).filter((imageUrl): imageUrl is string => Boolean(imageUrl)),
+        mode: "submit",
+        model: modelId,
+        params: requestParams,
+        prompt: requestPrompt,
+        sourceNodeId: id
+      };
+      images = await requestGeneratedImages(requestBody, controller);
       generationControllers.delete(id);
       const current = get().nodes.find((node) => node.id === id);
       if (current?.data.generationId !== generationId || current.data.runState !== "running") return;
-      const responseText = await response.text();
-      let payload: { debug?: { mode?: string; size?: string }; images?: Array<{ url?: string }>; error?: string };
-      try {
-        payload = JSON.parse(responseText) as { debug?: { mode?: string; size?: string }; images?: Array<{ url?: string }>; error?: string };
-      } catch {
-        const fallback = responseText.trim().replace(/\s+/g, " ").slice(0, 160);
-        throw new Error(response.ok ? "AI 服务返回格式异常。" : `AI 生成失败：${response.status}${fallback ? ` ${fallback}` : ""}`);
-      }
-      const debugText = payload.debug ? ` (${payload.debug.mode ?? "unknown"}, ${payload.debug.size ?? "unknown"})` : "";
-      if (!response.ok) throw new Error(`${payload.error || `AI 生成失败：${response.status}`}${debugText}`);
-      images = (payload.images ?? []).map((image) => ({ url: image.url ?? "" })).filter((image) => Boolean(image.url));
       if (!images.length) throw new Error("AI 服务没有返回图片。");
     } catch (error) {
       generationControllers.delete(id);
@@ -2337,33 +2399,21 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const current = get().nodes.find((node) => node.id === id);
       if (current?.data.generationId !== generationId || current.data.runState !== "running") return;
       const params = source.data.modelParams ?? {};
-      const imageResponse = await fetch("/api/ai/generate-image", {
-        body: JSON.stringify({
-          aiSettings: getClientAiSettingsPayload(),
-          images: referenceImages.map((node) => node.data.imageUrl).filter((url): url is string => Boolean(url)),
-          model: visualModel,
-          params: {
-            aspectRatio: params.aspectRatio ?? "9:16",
-            imageCount: source.data.modelParams?.imageCount ?? "1",
-            resolution: params.resolution ?? "2K"
-          },
-          prompt: boardPrompt,
-          sourceNodeId: id
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-        signal: controller.signal
-      });
-      const imageText = await imageResponse.text();
-      let imagePayload: { error?: string; images?: Array<{ url?: string }> };
-      try {
-        imagePayload = JSON.parse(imageText) as { error?: string; images?: Array<{ url?: string }> };
-      } catch {
-        throw new Error(imageResponse.ok ? "视觉规范图返回格式异常。" : `视觉规范图生成失败：${imageResponse.status}`);
-      }
-      if (!imageResponse.ok) throw new Error(imagePayload.error || `视觉规范图生成失败：${imageResponse.status}`);
-      const imageUrls = (imagePayload.images ?? [])
-        .map((image) => typeof image.url === "string" ? image.url : "")
+      const visualImages = await requestGeneratedImages({
+        aiSettings: getClientAiSettingsPayload(),
+        images: referenceImages.map((node) => node.data.imageUrl).filter((url): url is string => Boolean(url)),
+        mode: "submit",
+        model: visualModel,
+        params: {
+          aspectRatio: params.aspectRatio ?? "9:16",
+          imageCount: source.data.modelParams?.imageCount ?? "1",
+          resolution: params.resolution ?? "2K"
+        },
+        prompt: boardPrompt,
+        sourceNodeId: id
+      }, controller);
+      const imageUrls = visualImages
+        .map((image) => image.url)
         .filter(Boolean)
         .slice(0, Math.min(6, Math.max(1, Number.parseInt(source.data.modelParams?.imageCount ?? "1", 10) || 1)));
       if (!imageUrls.length) throw new Error("AI 服务没有返回视觉规范图。");
