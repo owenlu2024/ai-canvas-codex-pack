@@ -3,11 +3,12 @@ import { createHash } from "crypto";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { getReferenceImageLimit, isAgnesImageModel } from "@/lib/generateImageModels";
-import { readApiSettings, type ApiSettings } from "@/lib/serverAiSettings";
+import { readApiSettings, type ApiSettings, type StoredApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataPath, getPublicAssetPath } from "@/lib/serverPaths";
 import { assertSafeRemoteFetchUrl, normalizeHttpBaseUrl } from "@/lib/urlSafety";
 
 interface GenerateImageRequest {
+  aiSettings?: StoredApiSettings;
   model?: string;
   prompt?: string;
   params?: Record<string, string>;
@@ -65,8 +66,9 @@ function is12AiBaseUrl(value: string) {
   }
 }
 
-async function readSettings(model?: string): Promise<ApiSettings> {
+async function readSettings(model?: string, clientSettings?: StoredApiSettings): Promise<ApiSettings> {
   return readApiSettings(settingsPath, {
+    clientSettings,
     defaultAgnesBaseUrl: "https://apihub.agnes-ai.com",
     isAgnesModel: isAgnesImageModel,
     model,
@@ -1037,7 +1039,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as GenerateImageRequest;
     const model = body.model?.trim();
     const prompt = body.prompt?.trim();
-    const settings = await readSettings(model);
+    const settings = await readSettings(model, body.aiSettings);
     console.log("[generate-image] request received", {
       imageCount: body.images?.length ?? 0,
       model,

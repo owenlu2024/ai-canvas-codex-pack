@@ -27,7 +27,7 @@ interface StoredApiSettings {
 }
 
 const emptySettings: ApiSettings = {
-  baseUrl: "",
+  baseUrl: "https://cdn.12ai.org",
   apiKey: ""
 };
 
@@ -146,36 +146,19 @@ export default function SettingsPage() {
     };
 
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({
-        ...storedSettings,
-        settings: { ...nextSettings, apiKey: "" }
-      }));
+      window.localStorage.setItem(storageKey, JSON.stringify(storedSettings));
       window.localStorage.removeItem(legacyStorageKey);
     } catch {
       // localStorage can be unavailable in private or restricted browser contexts.
     }
 
-    try {
-      const response = await fetch("/api/ai/settings", {
-        body: JSON.stringify(storedSettings),
-        headers: { "Content-Type": "application/json" },
-        method: "POST"
-      });
-      const saved = (await response.json()) as StoredApiSettings & { error?: string };
-      if (!response.ok) {
-        throw new Error(saved.error || "无法保存本机设置。");
-      }
-      setSavedAt(saved.savedAt);
-      setSaveError("");
-    } catch (error) {
-      setSavedAt(nextSavedAt);
-      setSaveError(error instanceof Error ? error.message : "无法保存本机设置。");
-    }
+    setSavedAt(nextSavedAt);
+    setSaveError("");
   }, [imageModels, settings, textModels]);
 
   const saveSettings = () => {
     void persistSettings();
-    setStatus("已保存到本机。");
+    setStatus("已保存到当前浏览器。");
   };
 
   useEffect(() => {
@@ -229,7 +212,7 @@ export default function SettingsPage() {
         </Link>
         <section className="rounded-[18px] border border-line bg-white p-7 shadow-soft">
           <h1 className="text-2xl font-bold">设置</h1>
-          <p className="mt-2 text-sm text-secondary">配置会保存在本机，重新打开后自动恢复。</p>
+          <p className="mt-2 text-sm text-secondary">配置会保存在当前浏览器，重新打开后自动恢复。</p>
           <div className="mt-8 grid gap-5">
             <Field label="AI 服务地址">
               <input

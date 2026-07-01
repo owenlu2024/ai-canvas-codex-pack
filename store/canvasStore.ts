@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Edge, Node, Viewport, XYPosition } from "@xyflow/react";
+import { getClientAiSettingsPayload } from "@/lib/clientAiSettings";
 import { defaultIndustrialDesignImageModelId, defaultProductRemixModelId, defaultSceneImageModelId, getDefaultIndustrialDesignImageParams, getDefaultProductRemixParams, getDefaultSceneImageParams, getReferenceImageLimit } from "@/lib/generateImageModels";
 import { nodeLabels, type CanvasNodeData, type NodeKind } from "@/lib/nodeTypes";
 import { nextZIndex } from "@/lib/zIndex";
@@ -2025,8 +2026,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     let textLayoutStyleSummary = "";
     if (isTextImageLayoutNode && textLayoutStyleReferenceImages.length) {
       try {
-        const response = await fetch("/api/ai/style-reference-summary", {
-          body: JSON.stringify({
+      const response = await fetch("/api/ai/style-reference-summary", {
+        body: JSON.stringify({
+            aiSettings: getClientAiSettingsPayload(),
             images: textLayoutStyleReferenceImages.map((node) => ({
               imageNumber: typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined,
               url: node.data.imageUrl
@@ -2100,6 +2102,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       });
       const response = await fetch("/api/ai/generate-image", {
         body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
           images: referenceImages.map((node) => node.data.imageUrl).filter((imageUrl): imageUrl is string => Boolean(imageUrl)),
           model: modelId,
           params: requestParams,
@@ -2305,6 +2308,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     try {
       const analysisResponse = await fetch("/api/ai/visual-director", {
         body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
           images: referenceImages.map((node) => ({
             imageNumber: typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined,
             title: node.data.title,
@@ -2335,6 +2339,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const params = source.data.modelParams ?? {};
       const imageResponse = await fetch("/api/ai/generate-image", {
         body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
           images: referenceImages.map((node) => node.data.imageUrl).filter((url): url is string => Boolean(url)),
           model: visualModel,
           params: {
@@ -2472,6 +2477,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     try {
       const response = await fetch("/api/ai/prompt-image", {
         body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
           images: referenceImages,
           instruction,
           model: typeof source.data.modelId === "string" ? source.data.modelId : defaultAiPromptModel,
@@ -2611,6 +2617,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     try {
       const response = await fetch("/api/ai/scene-director", {
         body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
           images: referenceImages,
           instruction,
           model: typeof source.data.modelId === "string" ? source.data.modelId : defaultSceneDirectorModel,
@@ -2750,6 +2757,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     try {
       const response = await fetch("/api/ai/taobao-page-director", {
         body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
           images: referenceImages,
           instruction,
           model: typeof source.data.modelId === "string" ? source.data.modelId : defaultTaobaoPageDirectorModel,
@@ -2889,6 +2897,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     try {
       const response = await fetch("/api/ai/industrial-designer", {
         body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
           images: referenceImages,
           instruction,
           model: typeof source.data.modelId === "string" ? source.data.modelId : defaultIndustrialDesignerModel,

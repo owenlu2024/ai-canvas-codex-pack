@@ -1,11 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
-import { readApiSettings, type ApiSettings } from "@/lib/serverAiSettings";
+import { readApiSettings, type ApiSettings, type StoredApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataPath, getPublicAssetPath } from "@/lib/serverPaths";
 import { assertSafeRemoteFetchUrl, normalizeHttpBaseUrl } from "@/lib/urlSafety";
 
 interface StyleReferenceSummaryRequest {
+  aiSettings?: StoredApiSettings;
   images?: Array<{ imageNumber?: number; url?: string }>;
   instruction?: string;
   model?: string;
@@ -24,8 +25,9 @@ function isAgnesTextModel(model?: string) {
   return Boolean(model?.startsWith("agnes-") && !model.includes("image"));
 }
 
-async function readSettings(model?: string): Promise<ApiSettings> {
+async function readSettings(model?: string, clientSettings?: StoredApiSettings): Promise<ApiSettings> {
   return readApiSettings(settingsPath, {
+    clientSettings,
     defaultAgnesBaseUrl: "https://apihub.agnes-ai.com",
     isAgnesModel: isAgnesTextModel,
     model,
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     const labels = images.map((image, index) => `<Image${String(Number.isInteger(image.imageNumber) ? image.imageNumber : index + 1).padStart(3, "0")}>`);
     const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : defaultModel;
-    const settings = await readSettings(model);
+    const settings = await readSettings(model, body.aiSettings);
     if (!settings.apiKey || !settings.baseUrl) {
       return NextResponse.json({ error: isAgnesTextModel(model) ? "请先在设置里保存 Agnes 服务地址和 API Key。" : "请先在设置里保存 AI 服务地址和 API Key。" }, { status: 400 });
     }

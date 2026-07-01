@@ -11,6 +11,7 @@ export interface StoredApiSettings {
 }
 
 interface ReadSettingsOptions {
+  clientSettings?: StoredApiSettings;
   defaultAgnesBaseUrl?: string;
   isAgnesModel?: (model?: string) => boolean;
   model?: string;
@@ -49,12 +50,13 @@ export async function readApiSettings(settingsPath: string, options: ReadSetting
   }
 
   const isAgnes = Boolean(options.isAgnesModel?.(options.model));
+  const clientSource = isAgnes ? options.clientSettings?.agnesSettings : options.clientSettings?.settings;
   const source = isAgnes ? saved.agnesSettings : saved.settings;
   const envSettings = readEnvApiSettings(options);
   const fallbackBaseUrl = isAgnes ? options.defaultAgnesBaseUrl || "https://apihub.agnes-ai.com" : "";
 
   return {
-    apiKey: source?.apiKey?.trim() || envSettings.apiKey,
-    baseUrl: options.normalizeBaseUrl(source?.baseUrl ?? (envSettings.baseUrl || fallbackBaseUrl))
+    apiKey: clientSource?.apiKey?.trim() || source?.apiKey?.trim() || envSettings.apiKey,
+    baseUrl: options.normalizeBaseUrl(clientSource?.baseUrl ?? source?.baseUrl ?? (envSettings.baseUrl || fallbackBaseUrl))
   };
 }

@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Save, Settings, TestTube2, X } from "lucide-react";
+import { clientAiSettingsStorageKey as storageKey, legacyClientAiSettingsStorageKey as legacyStorageKey, normalizeClientStoredSettings } from "@/lib/clientAiSettings";
 import { useCanvasStore } from "@/store/canvasStore";
-
-const storageKey = "ai-canvas-api-settings-v1";
-const legacyStorageKey = "ai-canvas-api-settings";
 
 interface ApiSettings {
   baseUrl: string;
@@ -30,7 +28,7 @@ interface StoredApiSettings {
 
 const emptySettings: ApiSettings = {
   apiKey: "",
-  baseUrl: ""
+  baseUrl: "https://cdn.12ai.org"
 };
 
 const defaultAgnesSettings: ApiSettings = {
@@ -41,15 +39,7 @@ const defaultAgnesSettings: ApiSettings = {
 function readStoredSettings(): StoredApiSettings | null {
   const saved = window.localStorage.getItem(storageKey);
   if (saved) {
-    const parsed = JSON.parse(saved) as Partial<StoredApiSettings>;
-    return {
-      agnesSettings: { ...defaultAgnesSettings, ...(parsed.agnesSettings ?? {}) },
-      imageModels: parsed.imageModels ?? [],
-      savedAt: parsed.savedAt ?? new Date().toISOString(),
-      settings: { ...emptySettings, ...(parsed.settings ?? {}) },
-      textModels: parsed.textModels ?? [],
-      version: 1
-    };
+    return normalizeClientStoredSettings(JSON.parse(saved) as Partial<StoredApiSettings>) as StoredApiSettings;
   }
 
   const legacySaved = window.localStorage.getItem(legacyStorageKey);
@@ -120,6 +110,23 @@ export function SettingsPanel() {
     let active = true;
     const hydrateSettings = async () => {
       try {
+        const saved = readStoredSettings();
+        if (saved) {
+          if (!active) return;
+          setSettings({ ...emptySettings, ...saved.settings });
+          setAgnesSettings({ ...defaultAgnesSettings, ...(saved.agnesSettings ?? {}) });
+          setImageModels(saved.imageModels ?? []);
+          setTextModels(saved.textModels ?? []);
+          setSavedAt(saved.savedAt);
+          setHydrated(true);
+          return;
+        }
+      } catch {
+        window.localStorage.removeItem(storageKey);
+        window.localStorage.removeItem(legacyStorageKey);
+      }
+
+      try {
         const response = await fetch("/api/ai/settings", { cache: "no-store" });
         if (response.ok) {
           const saved = (await response.json()) as StoredApiSettings;
@@ -133,25 +140,10 @@ export function SettingsPanel() {
           return;
         }
       } catch {
-        // Browser storage below is the fallback when the local settings file is unavailable.
+        // Server settings are optional for the hosted version.
       }
 
-      if (!active) return;
-      try {
-        const saved = readStoredSettings();
-        if (saved) {
-          setSettings({ ...emptySettings, ...saved.settings });
-          setAgnesSettings({ ...defaultAgnesSettings, ...(saved.agnesSettings ?? {}) });
-          setImageModels(saved.imageModels ?? []);
-          setTextModels(saved.textModels ?? []);
-          setSavedAt(saved.savedAt);
-        }
-      } catch {
-        window.localStorage.removeItem(storageKey);
-        window.localStorage.removeItem(legacyStorageKey);
-      } finally {
-        if (active) setHydrated(true);
-      }
+      if (active) setHydrated(true);
     };
 
     void hydrateSettings();
@@ -177,30 +169,14 @@ export function SettingsPanel() {
     };
 
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({
-        ...storedSettings,
-        agnesSettings: { ...nextAgnesSettings, apiKey: "" },
-        settings: { ...nextSettings, apiKey: "" }
-      }));
+      window.localStorage.setItem(storageKey, JSON.stringify(storedSettings));
       window.localStorage.removeItem(legacyStorageKey);
     } catch {
       // localStorage can be unavailable in private or restricted browser contexts.
     }
 
-    try {
-      const response = await fetch("/api/ai/settings", {
-        body: JSON.stringify(storedSettings),
-        headers: { "Content-Type": "application/json" },
-        method: "POST"
-      });
-      const saved = (await response.json()) as StoredApiSettings & { error?: string };
-      if (!response.ok) throw new Error(saved.error || "无法保存本机设置。");
-      setSavedAt(saved.savedAt);
-      setSaveError("");
-    } catch (error) {
-      setSavedAt(nextSavedAt);
-      setSaveError(error instanceof Error ? error.message : "无法保存本机设置。");
-    }
+    setSavedAt(nextSavedAt);
+    setSaveError("");
   }, [agnesSettings, imageModels, settings, textModels]);
 
   useEffect(() => {
@@ -334,7 +310,7 @@ export function SettingsPanel() {
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-[15px] font-bold leading-5 text-primary">设置</h2>
-          <p className="truncate text-xs font-semibold text-secondary">配置保存在本机</p>
+          <p className="truncate text-xs font-semibold text-secondary">配置保存在当前浏览器</p>
         </div>
         <button
           aria-label="关闭设置"
@@ -381,7 +357,7 @@ export function SettingsPanel() {
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-white px-2.5 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB]"
                 onClick={() => {
                   void persistSettings();
-                  setStatus("已保存到本机。");
+                  setStatus("已保存到当前浏览器。");
                 }}
                 type="button"
               >
@@ -428,7 +404,7 @@ export function SettingsPanel() {
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-white px-2.5 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB]"
                 onClick={() => {
                   void persistSettings();
-                  setStatus("已保存到本机。");
+                  setStatus("已保存到当前浏览器。");
                 }}
                 type="button"
               >
