@@ -3,18 +3,9 @@ import { createHash } from "crypto";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { getReferenceImageLimit, isAgnesImageModel } from "@/lib/generateImageModels";
+import { readApiSettings, type ApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataPath, getPublicAssetPath } from "@/lib/serverPaths";
 import { assertSafeRemoteFetchUrl, normalizeHttpBaseUrl } from "@/lib/urlSafety";
-
-interface ApiSettings {
-  baseUrl: string;
-  apiKey: string;
-}
-
-interface StoredApiSettings {
-  settings?: Partial<ApiSettings>;
-  agnesSettings?: Partial<ApiSettings>;
-}
 
 interface GenerateImageRequest {
   model?: string;
@@ -75,12 +66,12 @@ function is12AiBaseUrl(value: string) {
 }
 
 async function readSettings(model?: string): Promise<ApiSettings> {
-  const saved = JSON.parse(await fs.readFile(settingsPath, "utf8")) as StoredApiSettings;
-  const source = isAgnesImageModel(model) ? saved.agnesSettings : saved.settings;
-  return {
-    apiKey: source?.apiKey?.trim() ?? "",
-    baseUrl: normalizeBaseUrl(source?.baseUrl ?? (isAgnesImageModel(model) ? "https://apihub.agnes-ai.com" : ""))
-  };
+  return readApiSettings(settingsPath, {
+    defaultAgnesBaseUrl: "https://apihub.agnes-ai.com",
+    isAgnesModel: isAgnesImageModel,
+    model,
+    normalizeBaseUrl
+  });
 }
 
 function getImageCount(value?: string) {

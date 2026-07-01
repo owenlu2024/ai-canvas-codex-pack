@@ -1,18 +1,9 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
+import { readApiSettings, type ApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataPath, getPublicAssetPath } from "@/lib/serverPaths";
 import { assertSafeRemoteFetchUrl, normalizeHttpBaseUrl } from "@/lib/urlSafety";
-
-interface ApiSettings {
-  baseUrl: string;
-  apiKey: string;
-}
-
-interface StoredApiSettings {
-  settings?: Partial<ApiSettings>;
-  agnesSettings?: Partial<ApiSettings>;
-}
 
 interface StyleReferenceSummaryRequest {
   images?: Array<{ imageNumber?: number; url?: string }>;
@@ -34,12 +25,12 @@ function isAgnesTextModel(model?: string) {
 }
 
 async function readSettings(model?: string): Promise<ApiSettings> {
-  const saved = JSON.parse(await fs.readFile(settingsPath, "utf8")) as StoredApiSettings;
-  const source = isAgnesTextModel(model) ? saved.agnesSettings : saved.settings;
-  return {
-    apiKey: source?.apiKey?.trim() ?? "",
-    baseUrl: normalizeBaseRoot(source?.baseUrl ?? (isAgnesTextModel(model) ? "https://apihub.agnes-ai.com" : ""))
-  };
+  return readApiSettings(settingsPath, {
+    defaultAgnesBaseUrl: "https://apihub.agnes-ai.com",
+    isAgnesModel: isAgnesTextModel,
+    model,
+    normalizeBaseUrl: normalizeBaseRoot
+  });
 }
 
 async function imageSourceForTask(value: string) {

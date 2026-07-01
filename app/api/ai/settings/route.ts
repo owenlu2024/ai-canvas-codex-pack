@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import { NextRequest, NextResponse } from "next/server";
+import { readEnvApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataDir, getCanvasDataPath } from "@/lib/serverPaths";
 import { parseHttpUrl } from "@/lib/urlSafety";
 
@@ -58,6 +59,17 @@ export async function GET() {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
+      const envSettings = readEnvApiSettings({ normalizeBaseUrl: (value) => value.trim() });
+      const envAgnesSettings = readEnvApiSettings({
+        isAgnesModel: () => true,
+        normalizeBaseUrl: (value) => value.trim()
+      });
+      if (envSettings.apiKey || envSettings.baseUrl || envAgnesSettings.apiKey || envAgnesSettings.baseUrl) {
+        return NextResponse.json(normalizeStoredSettings({
+          agnesSettings: { apiKey: "", baseUrl: envAgnesSettings.baseUrl },
+          settings: { apiKey: "", baseUrl: envSettings.baseUrl }
+        }));
+      }
       return NextResponse.json({ error: "还没有保存设置。" }, { status: 404 });
     }
     return NextResponse.json({ error: "无法读取本机设置。" }, { status: 500 });

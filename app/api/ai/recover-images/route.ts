@@ -2,17 +2,9 @@ import { promises as fs } from "fs";
 import { createHash } from "crypto";
 import path from "path";
 import { NextResponse } from "next/server";
+import { readApiSettings, type ApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataPath } from "@/lib/serverPaths";
 import { normalizeHttpBaseUrl } from "@/lib/urlSafety";
-
-interface ApiSettings {
-  baseUrl: string;
-  apiKey: string;
-}
-
-interface StoredApiSettings {
-  settings?: Partial<ApiSettings>;
-}
 
 interface AiTaskRecoveryRecord {
   taskId: string;
@@ -78,11 +70,9 @@ function normalizeBaseUrl(value: string) {
 }
 
 async function readSettings(): Promise<ApiSettings> {
-  const saved = JSON.parse(await fs.readFile(settingsPath, "utf8")) as StoredApiSettings;
-  return {
-    apiKey: saved.settings?.apiKey?.trim() ?? "",
-    baseUrl: normalizeBaseUrl(saved.settings?.baseUrl ?? "")
-  };
+  return readApiSettings(settingsPath, {
+    normalizeBaseUrl
+  });
 }
 
 function normalizeGeneratedImagesFile(value: Partial<GeneratedImagesFile>): GeneratedImagesFile {
