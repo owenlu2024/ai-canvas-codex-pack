@@ -1,0 +1,38 @@
+{
+  "name": "ai-canvas-codex-pack",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:win-unpacked": "pnpm build && node scripts/package-win.cjs",
+    "build:win-web": "pnpm build && node scripts/package-win-web.cjs",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx"
+  },
+  "main": "electron/main.cjs",
+  "dependencies": {
+    "@xyflow/react": "^12.6.4",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "next": "^15.5.18",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sharp": "^0.35.2",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.4.4",
+    "@types/node": "^20.17.10",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "electron": "^31.7.7",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.5.18",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@11.7.0+sha512.19cc852c120c7125760f2443ee6be0ca5b40f9f50598de1a09a1f177503e010e57c23c77646e01e761de59bf874fb22a3398c33ab9691fc13eb946b6f0f4d620"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "AI Canvas Codex Pack",
+  "version": "1.0",
+  "purpose": "Codex development specifications, references, prompts and API reserved notes for AI Canvas high fidelity local prototype.",
+  "first_step": "Open prompts/01_CODEX_MASTER_PROMPT.md in Codex.",
+  "ui_reference_priority": [
+    "Figma design created by Codex MCP",
+    "references/*.png",
+    "docs/02_UI_DESIGN_SYSTEM.md",
+    "docs/03_INTERACTION_SPEC.md"
+  ],
+  "do_not_build_v1": [
+    "login",
+    "cloud save",
+    "export",
+    "share",
+    "payment",
+    "real AI API"
+  ]
+}

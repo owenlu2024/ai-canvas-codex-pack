@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js build output
+.next/
+.next-build/
+out/
+dist/
+build/
+
+# local app data and generated packages
+.ai-canvas/
+release/
+share/
+screenshots/
+
+# environment and secrets
+.env
+.env.*
+!.env.local.example
+
+# logs and local cache
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+tsconfig.tsbuildinfo
+
+# local QA notes
+design-qa.md
