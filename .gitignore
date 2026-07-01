@@ -31,3 +31,4 @@ tsconfig.tsbuildinfo
 
 # local QA notes
 design-qa.md
+.vercel

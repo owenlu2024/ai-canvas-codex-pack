@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+.next/
+.next-build/
+out/
+dist/
+build/
+release/
+share/
+.ai-canvas/
+screenshots/
+.DS_Store
+*.log
+tsconfig.tsbuildinfo
+design-qa.md
