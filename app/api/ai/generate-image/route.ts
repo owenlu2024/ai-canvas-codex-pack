@@ -1,5 +1,4 @@
 import { promises as fs } from "fs";
-import { createHash } from "crypto";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { getReferenceImageLimit, isAgnesImageModel } from "@/lib/generateImageModels";
@@ -37,17 +36,11 @@ interface SafeDebugRecord {
 
 const settingsPath = getCanvasDataPath("api-settings.local.json");
 const debugPath = getCanvasDataPath("ai-generate-debug.local.json");
-const generatedImagesPath = getCanvasDataPath("generated-images.local.json");
-const deletedGeneratedImagesPath = getCanvasDataPath("generated-images-deleted.local.json");
 const taskRecoveryPath = getCanvasDataPath("ai-task-recovery.local.json");
 const generationTimeoutMs = 30 * 60 * 1000;
 const agnesDirectTimeoutMs = 3 * 60 * 1000;
 
 export const maxDuration = 60;
-
-function getImageKey(imageUrl: string) {
-  return createHash("sha256").update(imageUrl).digest("hex");
-}
 
 function normalizeBaseUrl(value: string) {
   if (!value.trim()) return "";
@@ -699,29 +692,6 @@ async function writeDebug(record: SafeDebugRecord) {
   }
 }
 
-interface GeneratedImageBackup {
-  id: string;
-  imageUrl: string;
-  modelId?: string;
-  prompt?: string;
-  sourceNodeId?: string;
-  createdAt: string;
-}
-
-interface GeneratedImagesFile {
-  format: "ai-canvas-generated-images";
-  version: 1;
-  images: GeneratedImageBackup[];
-  savedAt: string;
-}
-
-interface DeletedGeneratedImagesFile {
-  format: "ai-canvas-deleted-generated-images";
-  version: 1;
-  imageKeys: string[];
-  savedAt: string;
-}
-
 interface AiTaskRecoveryRecord {
   taskId: string;
   model: string;
@@ -741,66 +711,6 @@ interface AiTaskRecoveryFile {
   version: 1;
   tasks: AiTaskRecoveryRecord[];
   savedAt: string;
-}
-
-function normalizeGeneratedImagesFile(value: Partial<GeneratedImagesFile>): GeneratedImagesFile {
-  return {
-    format: "ai-canvas-generated-images",
-    version: 1,
-    images: Array.isArray(value.images)
-      ? value.images.filter((image): image is GeneratedImageBackup => typeof image.id === "string" && typeof image.imageUrl === "string")
-      : [],
-    savedAt: typeof value.savedAt === "string" ? value.savedAt : new Date().toISOString()
-  };
-}
-
-function normalizeDeletedGeneratedImagesFile(value: Partial<DeletedGeneratedImagesFile>): DeletedGeneratedImagesFile {
-  return {
-    format: "ai-canvas-deleted-generated-images",
-    version: 1,
-    imageKeys: Array.isArray(value.imageKeys) ? value.imageKeys.filter((key): key is string => typeof key === "string") : [],
-    savedAt: typeof value.savedAt === "string" ? value.savedAt : new Date().toISOString()
-  };
-}
-
-async function appendGeneratedImageBackups(images: Array<{ url: string }>, details: { model: string; prompt: string; sourceNodeId?: string }) {
-  try {
-    if (!images.length) return 0;
-    let current = normalizeGeneratedImagesFile({ images: [] });
-    let deleted = normalizeDeletedGeneratedImagesFile({ imageKeys: [] });
-    try {
-      current = normalizeGeneratedImagesFile(JSON.parse(await fs.readFile(generatedImagesPath, "utf8")) as Partial<GeneratedImagesFile>);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    try {
-      deleted = normalizeDeletedGeneratedImagesFile(JSON.parse(await fs.readFile(deletedGeneratedImagesPath, "utf8")) as Partial<DeletedGeneratedImagesFile>);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    const createdAt = new Date().toISOString();
-    const existingUrls = new Set(current.images.map((image) => image.imageUrl));
-    const deletedKeys = new Set(deleted.imageKeys);
-    const incoming = images
-      .filter((image) => !existingUrls.has(image.url))
-      .filter((image) => !deletedKeys.has(getImageKey(image.url)))
-      .map((image, index) => ({
-        createdAt,
-        id: `generated-backup-${Date.now()}-${index}-${Math.round(Math.random() * 1000)}`,
-        imageUrl: image.url,
-        modelId: details.model,
-        prompt: details.prompt,
-        sourceNodeId: details.sourceNodeId
-      }));
-    if (!incoming.length) return 0;
-    const next = normalizeGeneratedImagesFile({ images: [...current.images, ...incoming] });
-    await fs.mkdir(path.dirname(generatedImagesPath), { recursive: true });
-    await fs.writeFile(generatedImagesPath, `${JSON.stringify({ ...next, savedAt: new Date().toISOString() }, null, 2)}\n`, "utf8");
-    return incoming.length;
-  } catch (error) {
-    console.warn("[generate-image] backup write skipped", error);
-    return 0;
-  }
 }
 
 function normalizeTaskRecoveryFile(value: Partial<AiTaskRecoveryFile>): AiTaskRecoveryFile {
@@ -1191,11 +1101,10 @@ export async function POST(request: NextRequest) {
           status: "running"
         }, { status: 202 });
       }
-      const backupSaved = await appendGeneratedImageBackups(images, { model, prompt, sourceNodeId: body.sourceNodeId });
       await Promise.all(taskIds.map((taskId) => updateRecoveryTask(taskId, { status: "backed_up" })));
       await writeDebug({
         at: new Date().toISOString(),
-        backupSaved,
+        backupSaved: 0,
         debug: {
           mode: "task-poll",
           taskIds
@@ -1205,7 +1114,7 @@ export async function POST(request: NextRequest) {
         responseKeys: results[0]?.responseKeys,
         responseStatus: 200
       });
-      return NextResponse.json({ debug: { backupSaved, mode: "task-poll", taskIds }, images, status: "completed" });
+      return NextResponse.json({ debug: { backupSaved: 0, mode: "task-poll", taskIds }, images, status: "completed" });
     }
 
     const result = isAgnesImageModel(model)
@@ -1215,20 +1124,19 @@ export async function POST(request: NextRequest) {
       : isGeminiImageModel(model)
       ? await executeGeminiNativeBatchGeneration(settings, context)
       : await executeAsyncGeneration(settings, context, n);
-    const backupSaved = await appendGeneratedImageBackups(result.images, { model, prompt, sourceNodeId: body.sourceNodeId });
     const taskIds = [result.debug.taskId, ...(Array.isArray(result.debug.taskIds) ? result.debug.taskIds : [])]
       .filter((taskId): taskId is string => typeof taskId === "string");
     await Promise.all(taskIds.map((taskId) => updateRecoveryTask(taskId, { status: "backed_up" })));
     await writeDebug({
       at: new Date().toISOString(),
-      backupSaved,
+      backupSaved: 0,
       debug: result.debug,
       imageCount: result.imageCount,
       responseContentType: result.responseContentType,
       responseKeys: result.responseKeys,
       responseStatus: result.responseStatus
     });
-    return NextResponse.json({ debug: { ...result.debug, backupSaved }, images: result.images });
+    return NextResponse.json({ debug: { ...result.debug, backupSaved: 0 }, images: result.images });
   } catch (error) {
     if (error instanceof AiProviderError) {
       await writeDebug({

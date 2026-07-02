@@ -558,7 +558,7 @@ export function AiCanvas() {
     return () => window.removeEventListener(openPromptEditorEvent, onOpenPromptEditor);
   }, [openPromptEditor]);
 
-  const persistWorkspace = useCallback((options?: { beacon?: boolean; localOnly?: boolean }) => {
+  const persistWorkspace = useCallback(() => {
     if (!workspaceHydrated) return;
     const workspace = createWorkspaceSnapshot();
     const serializedWorkspace = JSON.stringify(workspace);
@@ -572,22 +572,6 @@ export function AiCanvas() {
     } catch {
       // localStorage can be unavailable in private or restricted browser contexts.
     }
-
-    if (options?.localOnly) return;
-
-    if (options?.beacon && typeof navigator.sendBeacon === "function") {
-      const sent = navigator.sendBeacon("/api/canvas/workspace", new Blob([serializedWorkspace], { type: "application/json" }));
-      if (sent) return;
-    }
-
-    void fetch("/api/canvas/workspace", {
-      body: serializedWorkspace,
-      headers: { "Content-Type": "application/json" },
-      keepalive: options?.beacon,
-      method: "POST"
-    }).catch(() => {
-      // Browser local storage remains the immediate fallback.
-    });
   }, [createWorkspaceSnapshot, workspaceHydrated]);
 
   const onConnect: OnConnect = useCallback(
@@ -714,28 +698,7 @@ export function AiCanvas() {
   useEffect(() => {
     let active = true;
     const hydrateSavedWorkspace = async () => {
-      let fileWorkspace: CanvasWorkspaceSnapshot | null = null;
       let browserWorkspace: CanvasWorkspaceSnapshot | null = null;
-      let fileRequestFailed = false;
-      let fileMissing = false;
-      try {
-        const response = await fetch("/api/canvas/workspace", { cache: "no-store" });
-        if (response.ok) {
-          fileWorkspace = (await response.json()) as CanvasWorkspaceSnapshot;
-        } else {
-          let errorMessage = "";
-          try {
-            const payload = (await response.json()) as { error?: string };
-            errorMessage = typeof payload.error === "string" ? payload.error : "";
-          } catch {
-            // A non-JSON 404 can happen briefly during dev hot reload; do not treat it as an empty workspace.
-          }
-          fileMissing = response.status === 404 && errorMessage === "还没有保存工作区。";
-          fileRequestFailed = !fileMissing;
-        }
-      } catch {
-        fileRequestFailed = true;
-      }
 
       try {
         const saved = window.localStorage.getItem(workspaceStorageKey);
@@ -747,17 +710,11 @@ export function AiCanvas() {
       }
 
       if (!active) return;
-      const latestWorkspace = fileWorkspace && browserWorkspace && fileWorkspace.nodes.length > 0 && browserWorkspace.nodes.length === 0
-        ? fileWorkspace
-        : fileWorkspace && browserWorkspace && !isInitialExampleWorkspace(fileWorkspace) && isInitialExampleWorkspace(browserWorkspace)
-          ? fileWorkspace
-          : getLatestWorkspace([fileWorkspace, browserWorkspace]);
-      if (latestWorkspace) {
+      if (browserWorkspace) {
         restoredFromSavedRef.current = true;
-        hydrateWorkspace(latestWorkspace);
+        hydrateWorkspace(browserWorkspace);
         return;
       }
-      if (fileRequestFailed && !fileMissing) return;
       hydrateWorkspace(null);
     };
 
@@ -770,10 +727,7 @@ export function AiCanvas() {
   useEffect(() => {
     if (!workspaceHydrated) return;
     if (nodes.some((node) => isRunningLockingNode(node))) return;
-    persistWorkspace({ localOnly: true });
-    const saveTimer = window.setTimeout(() => {
-      persistWorkspace();
-    }, 150);
+    const saveTimer = window.setTimeout(persistWorkspace, 150);
     return () => window.clearTimeout(saveTimer);
   }, [activeEdgeId, edges, globalZIndex, gridEnabled, nodes, persistWorkspace, projectTitle, showAutoImageLinks, viewport, workspaceHydrated]);
 
@@ -795,9 +749,9 @@ export function AiCanvas() {
 
   useEffect(() => {
     if (!workspaceHydrated) return;
-    const saveBeforeLeaving = () => persistWorkspace({ beacon: true });
+    const saveBeforeLeaving = () => persistWorkspace();
     const saveWhenHidden = () => {
-      if (document.visibilityState === "hidden") persistWorkspace({ beacon: true });
+      if (document.visibilityState === "hidden") persistWorkspace();
     };
     window.addEventListener("pagehide", saveBeforeLeaving);
     window.addEventListener("beforeunload", saveBeforeLeaving);

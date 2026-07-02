@@ -101,15 +101,9 @@ export async function persistWorkspace(workspace: CanvasWorkspaceSnapshot) {
     try {
       window.localStorage.removeItem("ai-canvas-workspace-v1");
     } catch {
-      // Browser storage is optional; the server-side workspace file is still written below.
+      // Browser storage can be unavailable in private or restricted browser contexts.
     }
   }
-  const response = await fetch("/api/canvas/workspace", {
-    body: serializedWorkspace,
-    headers: { "Content-Type": "application/json" },
-    method: "POST"
-  });
-  if (!response.ok) throw new Error("本机工作区同步失败。");
 }
 
 export async function pickProjectSaveFile(suggestedName: string) {
