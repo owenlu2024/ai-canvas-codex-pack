@@ -439,14 +439,12 @@ function getReferenceImageNodes(inputNodes: Node<CanvasNodeData>[], limit = maxR
 
 function getPromptScopedReferenceImageNodes(
   allNodes: Node<CanvasNodeData>[],
-  inputNodes: Node<CanvasNodeData>[],
   promptNodes: Node<CanvasNodeData>[],
   limit = maxReferenceImageInputs
 ) {
-  const mentionedImageNodes = getPromptMentionedImageNodes(allNodes, promptNodes)
-    .filter((node) => node.data.kind === "image" && node.data.imageUrl);
-  if (mentionedImageNodes.length) return mentionedImageNodes.slice(0, limit);
-  return getReferenceImageNodes(inputNodes, limit);
+  return getPromptMentionedImageNodes(allNodes, promptNodes)
+    .filter((node) => node.data.kind === "image" && node.data.imageUrl)
+    .slice(0, limit);
 }
 
 function getRhinoPrimaryReferenceImage(inputEdges: Edge[], inputNodes: Node<CanvasNodeData>[], instruction = "") {
@@ -2049,17 +2047,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const referenceImageLimit = getReferenceImageLimit(modelId);
     const rhinoPrimaryReferenceImage = isRhinoTestNode ? getRhinoPrimaryReferenceImage(inputEdges, inputNodes, rolePrompt) : undefined;
     const allReferenceImages = isRhinoTestNode
-      ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(snapshot.nodes, inputNodes, promptNodes, Number.POSITIVE_INFINITY), rhinoPrimaryReferenceImage)
-      : getPromptScopedReferenceImageNodes(snapshot.nodes, inputNodes, promptNodes, Number.POSITIVE_INFINITY);
+      ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(snapshot.nodes, promptNodes, Number.POSITIVE_INFINITY), rhinoPrimaryReferenceImage)
+      : getPromptScopedReferenceImageNodes(snapshot.nodes, promptNodes, Number.POSITIVE_INFINITY);
     if (isRhinoTestNode && !allReferenceImages.length) {
       set((state) => ({
-        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请先连接 Rhino 产品截图图片。", generationId: undefined, runState: "failed" as const } } : node))
+        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请在 Prompt 里用 @Image 010 这类编号明确指定 Rhino 产品截图。", generationId: undefined, runState: "failed" as const } } : node))
       }));
       return;
     }
     if (isProductRemixNode && !allReferenceImages.length) {
       set((state) => ({
-        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请先连接产品图片。", generationId: undefined, runState: "failed" as const } } : node))
+        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请在 Prompt 里用 @Image 010 这类编号明确指定产品图片。", generationId: undefined, runState: "failed" as const } } : node))
       }));
       return;
     }
@@ -2236,8 +2234,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const outputRolePrompt = promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
       const outputRhinoPrimaryReferenceImage = source.data.kind === "rhinoTest" ? getRhinoPrimaryReferenceImage(inputEdges, inputNodes, outputRolePrompt) : undefined;
       const referenceImages = source.data.kind === "rhinoTest"
-        ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(cleaned.nodes, inputNodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined)), outputRhinoPrimaryReferenceImage)
-        : getPromptScopedReferenceImageNodes(cleaned.nodes, inputNodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined));
+        ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(cleaned.nodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined)), outputRhinoPrimaryReferenceImage)
+        : getPromptScopedReferenceImageNodes(cleaned.nodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined));
       const isGenerateImageOutput = source.data.kind === "generateImage";
       const isRhinoTestOutput = source.data.kind === "rhinoTest";
       const isTextImageLayoutOutput = source.data.kind === "textImageLayout";
