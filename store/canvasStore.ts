@@ -437,6 +437,18 @@ function getReferenceImageNodes(inputNodes: Node<CanvasNodeData>[], limit = maxR
     .slice(0, limit);
 }
 
+function getPromptScopedReferenceImageNodes(
+  allNodes: Node<CanvasNodeData>[],
+  inputNodes: Node<CanvasNodeData>[],
+  promptNodes: Node<CanvasNodeData>[],
+  limit = maxReferenceImageInputs
+) {
+  const mentionedImageNodes = getPromptMentionedImageNodes(allNodes, promptNodes)
+    .filter((node) => node.data.kind === "image" && node.data.imageUrl);
+  if (mentionedImageNodes.length) return mentionedImageNodes.slice(0, limit);
+  return getReferenceImageNodes(inputNodes, limit);
+}
+
 function getRhinoPrimaryReferenceImage(inputEdges: Edge[], inputNodes: Node<CanvasNodeData>[], instruction = "") {
   const imageNodes = new Map(
     inputNodes
@@ -474,6 +486,7 @@ function getRhinoPrimaryReferenceImage(inputEdges: Edge[], inputNodes: Node<Canv
 
 function orderRhinoReferenceImages(referenceImages: Node<CanvasNodeData>[], primaryImage?: Node<CanvasNodeData>) {
   if (!primaryImage) return referenceImages;
+  if (!referenceImages.some((node) => node.id === primaryImage.id)) return referenceImages;
   return [
     primaryImage,
     ...referenceImages.filter((node) => node.id !== primaryImage.id)
@@ -2036,8 +2049,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const referenceImageLimit = getReferenceImageLimit(modelId);
     const rhinoPrimaryReferenceImage = isRhinoTestNode ? getRhinoPrimaryReferenceImage(inputEdges, inputNodes, rolePrompt) : undefined;
     const allReferenceImages = isRhinoTestNode
-      ? orderRhinoReferenceImages(getReferenceImageNodes(inputNodes, Number.POSITIVE_INFINITY), rhinoPrimaryReferenceImage)
-      : getReferenceImageNodes(inputNodes, Number.POSITIVE_INFINITY);
+      ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(snapshot.nodes, inputNodes, promptNodes, Number.POSITIVE_INFINITY), rhinoPrimaryReferenceImage)
+      : getPromptScopedReferenceImageNodes(snapshot.nodes, inputNodes, promptNodes, Number.POSITIVE_INFINITY);
     if (isRhinoTestNode && !allReferenceImages.length) {
       set((state) => ({
         nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请先连接 Rhino 产品截图图片。", generationId: undefined, runState: "failed" as const } } : node))
@@ -2223,8 +2236,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const outputRolePrompt = promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
       const outputRhinoPrimaryReferenceImage = source.data.kind === "rhinoTest" ? getRhinoPrimaryReferenceImage(inputEdges, inputNodes, outputRolePrompt) : undefined;
       const referenceImages = source.data.kind === "rhinoTest"
-        ? orderRhinoReferenceImages(getReferenceImageNodes(inputNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined)), outputRhinoPrimaryReferenceImage)
-        : getReferenceImageNodes(inputNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined));
+        ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(cleaned.nodes, inputNodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined)), outputRhinoPrimaryReferenceImage)
+        : getPromptScopedReferenceImageNodes(cleaned.nodes, inputNodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined));
       const isGenerateImageOutput = source.data.kind === "generateImage";
       const isRhinoTestOutput = source.data.kind === "rhinoTest";
       const isTextImageLayoutOutput = source.data.kind === "textImageLayout";
