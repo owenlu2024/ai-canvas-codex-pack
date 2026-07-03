@@ -1345,7 +1345,6 @@ function isAutoMentionImageEdge(edge: Edge) {
 function syncMentionImageEdges(targetId: string, imageNodes: Node<CanvasNodeData>[], edges: Edge[]) {
   const mentionedIds = new Set(imageNodes.map((node) => node.id));
   const prunedEdges = edges.filter((edge) => {
-    if (!isAutoMentionImageEdge(edge)) return true;
     if (edge.target !== targetId || edge.targetHandle !== "image-in") return true;
     return mentionedIds.has(edge.source);
   });
