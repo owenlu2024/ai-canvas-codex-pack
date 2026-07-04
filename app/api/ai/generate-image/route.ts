@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
+import { getBaseModelId } from "@/lib/clientAiSettings";
 import { getReferenceImageLimit, isAgnesImageModel } from "@/lib/generateImageModels";
 import { readApiSettings, type ApiSettings, type StoredApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataPath, getPublicAssetPath } from "@/lib/serverPaths";
@@ -1032,9 +1033,10 @@ async function executeGeminiNativeBatchGeneration(settings: ApiSettings, context
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as GenerateImageRequest;
-    const model = body.model?.trim();
+    const rawModel = body.model?.trim();
+    const model = getBaseModelId(rawModel)?.trim();
     const prompt = body.prompt?.trim();
-    const settings = await readSettings(model, body.aiSettings);
+    const settings = await readSettings(rawModel, body.aiSettings);
     console.log("[generate-image] request received", {
       imageCount: body.images?.length ?? 0,
       model,

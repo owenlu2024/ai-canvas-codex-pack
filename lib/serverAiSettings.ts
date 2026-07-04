@@ -3,11 +3,13 @@ import { promises as fs } from "fs";
 export interface ApiSettings {
   baseUrl: string;
   apiKey: string;
+  id?: string;
 }
 
 export interface StoredApiSettings {
   settings?: Partial<ApiSettings>;
   agnesSettings?: Partial<ApiSettings>;
+  apiConfigs?: Partial<ApiSettings>[];
 }
 
 interface ReadSettingsOptions {
@@ -26,8 +28,17 @@ function firstEnvValue(keys: string[]) {
   return "";
 }
 
+function parseConfiguredModelId(model?: string) {
+  const match = typeof model === "string" ? model.match(/^(\d{3})-(.+)$/) : null;
+  return {
+    apiId: match?.[1],
+    modelId: match?.[2] ?? model
+  };
+}
+
 export function readEnvApiSettings(options: ReadSettingsOptions): ApiSettings {
-  const isAgnes = Boolean(options.isAgnesModel?.(options.model));
+  const parsed = parseConfiguredModelId(options.model);
+  const isAgnes = Boolean(options.isAgnesModel?.(parsed.modelId));
   const rawBaseUrl = isAgnes
     ? firstEnvValue(["AI_AGNES_API_BASE_URL", "AGNES_API_BASE_URL"]) || options.defaultAgnesBaseUrl || "https://apihub.agnes-ai.com"
     : firstEnvValue(["AI_API_BASE_URL", "AI_API_DIRECT_URL"]);
@@ -49,9 +60,12 @@ export async function readApiSettings(settingsPath: string, options: ReadSetting
     saved = {};
   }
 
-  const isAgnes = Boolean(options.isAgnesModel?.(options.model));
-  const clientSource = isAgnes ? options.clientSettings?.agnesSettings : options.clientSettings?.settings;
-  const source = isAgnes ? saved.agnesSettings : saved.settings;
+  const parsed = parseConfiguredModelId(options.model);
+  const isAgnes = Boolean(options.isAgnesModel?.(parsed.modelId));
+  const selectedClientSource = parsed.apiId ? options.clientSettings?.apiConfigs?.find((config) => config.id === parsed.apiId) : undefined;
+  const selectedSource = parsed.apiId ? saved.apiConfigs?.find((config) => config.id === parsed.apiId) : undefined;
+  const clientSource = selectedClientSource ?? (isAgnes ? options.clientSettings?.agnesSettings : options.clientSettings?.settings);
+  const source = selectedSource ?? (isAgnes ? saved.agnesSettings : saved.settings);
   const envSettings = readEnvApiSettings(options);
   const fallbackBaseUrl = isAgnes ? options.defaultAgnesBaseUrl || "https://apihub.agnes-ai.com" : "";
 

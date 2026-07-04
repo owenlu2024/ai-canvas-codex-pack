@@ -1,3 +1,5 @@
+import { getBaseModelId } from "@/lib/clientAiSettings";
+
 export type GenerateImageModelId = "gpt-image-2" | "gemini-3.1-flash-image-preview" | "gemini-3-pro-image-preview" | "agnes-image-2.1-flash";
 
 export type GenerateImageParamKey = "aspectRatio" | "resolution" | "quality" | "imageCount" | "size";
@@ -174,6 +176,7 @@ export const productRemixModelSpecs = sceneImageModelSpecs;
 export const defaultProductRemixModelId = productRemixModelSpecs[0].id;
 
 export function getReferenceImageLimit(modelId?: string) {
+  modelId = getBaseModelId(modelId);
   if (modelId === "gpt-image-2") return 5;
   if (modelId === "gemini-3.1-flash-image-preview") return 14;
   if (modelId === "gemini-3-pro-image-preview") return 14;
@@ -182,10 +185,12 @@ export function getReferenceImageLimit(modelId?: string) {
 }
 
 export function isAgnesImageModel(modelId?: string) {
+  modelId = getBaseModelId(modelId);
   return modelId === "agnes-image-2.1-flash";
 }
 
 export function getGenerateImageModelSpec(modelId?: string) {
+  modelId = getBaseModelId(modelId);
   const fallback = generateImageModelSpecs[0];
   const matched = generateImageModelSpecs.find((model) => model.id === modelId);
   if (!fallback) throw new Error("Missing Generate Image model specs.");
@@ -201,6 +206,7 @@ export function getDefaultGenerateImageParams(modelId?: string): Record<string, 
 }
 
 export function getGridImageModelSpec(modelId?: string) {
+  modelId = getBaseModelId(modelId);
   const fallback = gridImageModelSpecs[0];
   const matched = gridImageModelSpecs.find((model) => model.id === modelId);
   if (!fallback) throw new Error("Missing Generate Grid Image model specs.");
@@ -213,6 +219,7 @@ export function getDefaultGridImageParams(modelId?: string) {
 }
 
 export function getSceneImageModelSpec(modelId?: string) {
+  modelId = getBaseModelId(modelId);
   const fallback = sceneImageModelSpecs[0];
   const matched = sceneImageModelSpecs.find((model) => model.id === modelId);
   if (!fallback) throw new Error("Missing Scene Image model specs.");
@@ -230,6 +237,7 @@ export function getDefaultSceneImageParams(modelId?: string): Record<string, str
 }
 
 export function getIndustrialDesignImageModelSpec(modelId?: string) {
+  modelId = getBaseModelId(modelId);
   const fallback = industrialDesignImageModelSpecs[0];
   const matched = industrialDesignImageModelSpecs.find((model) => model.id === modelId);
   if (!fallback) throw new Error("Missing Industrial Design Image model specs.");
@@ -241,6 +249,7 @@ export function getDefaultIndustrialDesignImageParams(modelId?: string): Record<
 }
 
 export function getProductRemixModelSpec(modelId?: string) {
+  modelId = getBaseModelId(modelId);
   const fallback = productRemixModelSpecs[0];
   const matched = productRemixModelSpecs.find((model) => model.id === modelId);
   if (!fallback) throw new Error("Missing Product Remix model specs.");

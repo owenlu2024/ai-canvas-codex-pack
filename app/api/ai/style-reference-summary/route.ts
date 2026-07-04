@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
+import { getBaseModelId } from "@/lib/clientAiSettings";
 import { readApiSettings, type ApiSettings, type StoredApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataPath, getPublicAssetPath } from "@/lib/serverPaths";
 import { assertSafeRemoteFetchUrl, normalizeHttpBaseUrl } from "@/lib/urlSafety";
@@ -88,8 +89,9 @@ export async function POST(request: NextRequest) {
     if (!images.length) return NextResponse.json({ error: "缺少设计规范参考图。" }, { status: 400 });
 
     const labels = images.map((image, index) => `<Image${String(Number.isInteger(image.imageNumber) ? image.imageNumber : index + 1).padStart(3, "0")}>`);
-    const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : defaultModel;
-    const settings = await readSettings(model, body.aiSettings);
+    const rawModel = typeof body.model === "string" && body.model.trim() ? body.model.trim() : defaultModel;
+    const model = getBaseModelId(rawModel) ?? defaultModel;
+    const settings = await readSettings(rawModel, body.aiSettings);
     if (!settings.apiKey || !settings.baseUrl) {
       return NextResponse.json({ error: isAgnesTextModel(model) ? "请先在设置里保存 Agnes 服务地址和 API Key。" : "请先在设置里保存 AI 服务地址和 API Key。" }, { status: 400 });
     }

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Edge, Node, Viewport, XYPosition } from "@xyflow/react";
-import { getClientAiSettingsPayload } from "@/lib/clientAiSettings";
+import { getApiSettingsForModel, getBaseModelId, getClientAiSettingsPayload } from "@/lib/clientAiSettings";
 import { addClientGeneratedImages } from "@/lib/clientGeneratedImages";
 import { defaultIndustrialDesignImageModelId, defaultProductRemixModelId, defaultSceneImageModelId, getDefaultIndustrialDesignImageParams, getDefaultProductRemixParams, getDefaultSceneImageParams, getReferenceImageLimit } from "@/lib/generateImageModels";
 import { nodeLabels, type CanvasNodeData, type NodeKind } from "@/lib/nodeTypes";
@@ -254,9 +254,9 @@ async function readDirect12AiError(response: Response) {
 }
 
 async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
-  const model = typeof body.model === "string" ? body.model : "";
-  const aiSettings = body.aiSettings as { settings?: { apiKey?: string; baseUrl?: string } } | undefined;
-  const settings = aiSettings?.settings;
+  const model = getBaseModelId(typeof body.model === "string" ? body.model : "") ?? "";
+  const aiSettings = body.aiSettings as ReturnType<typeof getClientAiSettingsPayload>;
+  const settings = getApiSettingsForModel(aiSettings, typeof body.model === "string" ? body.model : "");
   const apiKey = settings?.apiKey?.trim() ?? "";
   const baseUrl = settings?.baseUrl?.trim() || "https://cdn.12ai.org";
   if (body.mode !== "submit" || (!isDirectGeminiImageModel(model) && !isDirectGptImageModel(model)) || !apiKey || !is12AiDirectBaseUrl(baseUrl)) return null;
@@ -356,14 +356,21 @@ async function prepareProxyGeneratedImagesBody(body: Record<string, unknown>) {
 }
 
 async function requestGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
+  const aiSettings = body.aiSettings as ReturnType<typeof getClientAiSettingsPayload>;
+  const rawModel = typeof body.model === "string" ? body.model : "";
+  const requestBody = {
+    ...body,
+    aiSettings: aiSettings ? { ...aiSettings, settings: getApiSettingsForModel(aiSettings, rawModel) ?? aiSettings.settings } : aiSettings,
+    model: getBaseModelId(rawModel)
+  };
   try {
-    const directImages = await requestDirect12AiGeneratedImages(body, controller);
+    const directImages = await requestDirect12AiGeneratedImages(requestBody, controller);
     if (directImages) return directImages;
   } catch (error) {
     if (!(error instanceof TypeError)) throw error;
   }
 
-  const proxyBody = await prepareProxyGeneratedImagesBody(body);
+  const proxyBody = await prepareProxyGeneratedImagesBody(requestBody);
   const directResponse = await fetch("/api/ai/generate-image", {
     body: JSON.stringify(proxyBody),
     headers: { "Content-Type": "application/json" },

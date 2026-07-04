@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Save, Settings, TestTube2, X } from "lucide-react";
-import { clientAiSettingsStorageKey as storageKey, legacyClientAiSettingsStorageKey as legacyStorageKey, normalizeClientStoredSettings } from "@/lib/clientAiSettings";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus, Save, Settings, TestTube2, Trash2, X } from "lucide-react";
+import { clientAiSettingsStorageKey as storageKey, formatApiConfigId, legacyClientAiSettingsStorageKey as legacyStorageKey, normalizeClientStoredSettings } from "@/lib/clientAiSettings";
 import { useCanvasStore } from "@/store/canvasStore";
 
 interface ApiSettings {
   baseUrl: string;
   apiKey: string;
+  id?: string;
 }
 
 interface ModelResponse {
@@ -19,6 +20,7 @@ interface ModelResponse {
 
 interface StoredApiSettings {
   version: 1;
+  apiConfigs?: ApiSettings[];
   settings: ApiSettings;
   agnesSettings: ApiSettings;
   imageModels: string[];
@@ -28,13 +30,58 @@ interface StoredApiSettings {
 
 const emptySettings: ApiSettings = {
   apiKey: "",
+  id: "001",
   baseUrl: "https://cdn.12ai.org"
 };
 
 const defaultAgnesSettings: ApiSettings = {
   apiKey: "",
+  id: "002",
   baseUrl: "https://apihub.agnes-ai.com"
 };
+
+function ensureApiIds(configs: ApiSettings[]) {
+  return configs.length
+    ? configs.map((config, index) => ({ ...config, id: config.id ?? formatApiConfigId(index) }))
+    : [emptySettings];
+}
+
+function modelBaseId(model: string) {
+  const match = model.match(/^\d{3}-(.+)$/);
+  return match?.[1] ?? model;
+}
+
+function prefixModelsForPrimary(models: string[]) {
+  return models.map((model) => (/^\d{3}-/.test(model) ? model : `001-${model}`));
+}
+
+function unprefixPrimaryModels(models: string[]) {
+  return models
+    .filter((model) => !/^\d{3}-/.test(model) || model.startsWith("001-"))
+    .map((model) => model.replace(/^001-/, ""));
+}
+
+function replaceModelsForApi(existingModels: string[], apiId: string, loadedModels: string[], hasMultipleApis: boolean) {
+  const nextLoadedModels = loadedModels.map((model) => (hasMultipleApis ? `${apiId}-${modelBaseId(model)}` : modelBaseId(model)));
+  const remainingModels = existingModels.filter((model) => {
+    if (hasMultipleApis) return !model.startsWith(`${apiId}-`) && !(!/^\d{3}-/.test(model) && apiId === "001");
+    return false;
+  });
+  return Array.from(new Set([...remainingModels, ...nextLoadedModels])).sort();
+}
+
+function getNextApiConfigId(configs: ApiSettings[]) {
+  const maxId = configs.reduce((max, config, index) => {
+    const numericId = Number.parseInt(config.id ?? formatApiConfigId(index), 10);
+    return Number.isFinite(numericId) ? Math.max(max, numericId) : max;
+  }, 0);
+  return String(maxId + 1).padStart(3, "0");
+}
+
+function removeModelsForApi(models: string[], removedId: string, remainingCount: number) {
+  const cleared = models.filter((model) => !model.startsWith(`${removedId}-`));
+  return remainingCount === 1 ? unprefixPrimaryModels(cleared) : cleared;
+}
 
 function readStoredSettings(): StoredApiSettings | null {
   const saved = window.localStorage.getItem(storageKey);
@@ -81,8 +128,7 @@ function inputClassName() {
 export function SettingsPanel() {
   const open = useCanvasStore((state) => state.settingsPanelOpen);
   const setOpen = useCanvasStore((state) => state.setSettingsPanelOpen);
-  const [settings, setSettings] = useState<ApiSettings>(emptySettings);
-  const [agnesSettings, setAgnesSettings] = useState<ApiSettings>(defaultAgnesSettings);
+  const [apiConfigs, setApiConfigs] = useState<ApiSettings[]>([emptySettings]);
   const [imageModels, setImageModels] = useState<string[]>([]);
   const [textModels, setTextModels] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -113,10 +159,10 @@ export function SettingsPanel() {
         const saved = readStoredSettings();
         if (saved) {
           if (!active) return;
-          setSettings({ ...emptySettings, ...saved.settings });
-          setAgnesSettings({ ...defaultAgnesSettings, ...(saved.agnesSettings ?? {}) });
-          setImageModels(saved.imageModels ?? []);
-          setTextModels(saved.textModels ?? []);
+          const configs = ensureApiIds(saved.apiConfigs ?? [saved.settings ?? emptySettings]);
+          setApiConfigs(configs);
+          setImageModels(configs.length > 1 ? prefixModelsForPrimary(saved.imageModels ?? []) : unprefixPrimaryModels(saved.imageModels ?? []));
+          setTextModels(configs.length > 1 ? prefixModelsForPrimary(saved.textModels ?? []) : unprefixPrimaryModels(saved.textModels ?? []));
           setSavedAt(saved.savedAt);
           setHydrated(true);
           return;
@@ -131,10 +177,10 @@ export function SettingsPanel() {
         if (response.ok) {
           const saved = (await response.json()) as StoredApiSettings;
           if (!active) return;
-          setSettings({ ...emptySettings, ...saved.settings });
-          setAgnesSettings({ ...defaultAgnesSettings, ...(saved.agnesSettings ?? {}) });
-          setImageModels(saved.imageModels ?? []);
-          setTextModels(saved.textModels ?? []);
+          const configs = ensureApiIds(saved.apiConfigs ?? [saved.settings ?? emptySettings]);
+          setApiConfigs(configs);
+          setImageModels(configs.length > 1 ? prefixModelsForPrimary(saved.imageModels ?? []) : unprefixPrimaryModels(saved.imageModels ?? []));
+          setTextModels(configs.length > 1 ? prefixModelsForPrimary(saved.textModels ?? []) : unprefixPrimaryModels(saved.textModels ?? []));
           setSavedAt(saved.savedAt);
           setHydrated(true);
           return;
@@ -153,17 +199,18 @@ export function SettingsPanel() {
   }, [hydrated, open]);
 
   const persistSettings = useCallback(async (
-    nextSettings = settings,
+    nextApiConfigs = apiConfigs,
     nextImageModels = imageModels,
-    nextTextModels = textModels,
-    nextAgnesSettings = agnesSettings
+    nextTextModels = textModels
   ) => {
+    const normalizedApiConfigs = ensureApiIds(nextApiConfigs);
     const nextSavedAt = new Date().toISOString();
     const storedSettings: StoredApiSettings = {
-      agnesSettings: nextAgnesSettings,
+      agnesSettings: normalizedApiConfigs[1] ?? defaultAgnesSettings,
+      apiConfigs: normalizedApiConfigs,
       imageModels: nextImageModels,
       savedAt: nextSavedAt,
-      settings: nextSettings,
+      settings: normalizedApiConfigs[0] ?? emptySettings,
       textModels: nextTextModels,
       version: 1
     };
@@ -177,7 +224,8 @@ export function SettingsPanel() {
 
     setSavedAt(nextSavedAt);
     setSaveError("");
-  }, [agnesSettings, imageModels, settings, textModels]);
+    window.dispatchEvent(new Event("ai-canvas-api-settings-updated"));
+  }, [apiConfigs, imageModels, textModels]);
 
   useEffect(() => {
     if (!hydrated || !open) return undefined;
@@ -208,70 +256,65 @@ export function SettingsPanel() {
     };
   }, [clampPanelPosition, panelDragging]);
 
-  const canLoadModels = useMemo(() => Boolean(settings.baseUrl.trim() && settings.apiKey.trim()), [settings.apiKey, settings.baseUrl]);
-  const canLoadAgnesModels = useMemo(() => Boolean(agnesSettings.baseUrl.trim() && agnesSettings.apiKey.trim()), [agnesSettings.apiKey, agnesSettings.baseUrl]);
-
-  const updateSettings = (patch: Partial<ApiSettings>) => {
-    setSettings((current) => ({ ...current, ...patch }));
+  const updateApiConfig = (index: number, patch: Partial<ApiSettings>) => {
+    setApiConfigs((current) => current.map((config, configIndex) => (configIndex === index ? { ...config, ...patch } : config)));
   };
 
-  const updateAgnesSettings = (patch: Partial<ApiSettings>) => {
-    setAgnesSettings((current) => ({ ...current, ...patch }));
+  const addApiConfig = () => {
+    setApiConfigs((current) => {
+      const nextId = getNextApiConfigId(current);
+      const next = ensureApiIds([...current, { apiKey: "", baseUrl: "", id: nextId }]);
+      if (current.length === 1) {
+        setImageModels((models) => prefixModelsForPrimary(models));
+        setTextModels((models) => prefixModelsForPrimary(models));
+      }
+      setStatus(`已添加 ${nextId} AI。`);
+      return next;
+    });
   };
 
-  const loadModels = async () => {
-    if (!canLoadModels) {
-      setStatus("请先填写服务地址和 API Key。");
-      return;
-    }
-    setLoading(true);
-    setStatus("正在读取模型列表...");
-    try {
-      const response = await fetch("/api/ai/models", {
-        body: JSON.stringify({ apiKey: settings.apiKey, baseUrl: settings.baseUrl }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST"
-      });
-      const data = (await response.json()) as ModelResponse;
-      if (!response.ok) throw new Error(data.error || "连接失败");
-
-      setImageModels(data.imageModels);
-      setTextModels(data.textModels);
-      setStatus(`已读取并保存 ${data.imageModels.length + data.textModels.length} 个模型。`);
-      void persistSettings(settings, data.imageModels, data.textModels, agnesSettings);
-    } catch (error) {
-      setImageModels([]);
-      setTextModels([]);
-      setStatus(error instanceof Error ? error.message : "连接失败，请检查配置。");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAgnesModels = async () => {
-    if (!canLoadAgnesModels) {
-      setStatus("请先填写 002 AI 服务地址和 API Key。");
-      return;
-    }
-    setLoading(true);
-    setStatus("正在测试 002 AI 连接...");
-    try {
-      const response = await fetch("/api/ai/models", {
-        body: JSON.stringify({ apiKey: agnesSettings.apiKey, baseUrl: agnesSettings.baseUrl, provider: "agnes" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST"
-      });
-      const data = (await response.json()) as ModelResponse;
-      if (!response.ok) throw new Error(data.error || "连接失败");
-
-      const nextImageModels = Array.from(new Set([...imageModels, ...data.imageModels])).sort();
-      const nextTextModels = Array.from(new Set([...textModels, ...data.textModels])).sort();
+  const removeApiConfig = (index: number) => {
+    if (index === 0) return;
+    setApiConfigs((current) => {
+      const removedId = current[index]?.id ?? formatApiConfigId(index);
+      const next = ensureApiIds(current.filter((_, configIndex) => configIndex !== index));
+      const nextImageModels = removeModelsForApi(imageModels, removedId, next.length);
+      const nextTextModels = removeModelsForApi(textModels, removedId, next.length);
       setImageModels(nextImageModels);
       setTextModels(nextTextModels);
-      setStatus(`002 AI 连接成功，已加入 ${data.imageModels.length + data.textModels.length} 个模型。`);
-      void persistSettings(settings, nextImageModels, nextTextModels, agnesSettings);
+      setStatus(`已删除 ${removedId} AI，并清理它的模型。`);
+      void persistSettings(next, nextImageModels, nextTextModels);
+      return next;
+    });
+  };
+
+  const loadModels = async (index: number) => {
+    const config = apiConfigs[index];
+    const apiId = config?.id ?? formatApiConfigId(index);
+    if (!config?.baseUrl.trim() || !config.apiKey.trim()) {
+      setStatus(`请先填写 ${apiId} AI 服务地址和 API Key。`);
+      return;
+    }
+    setLoading(true);
+    setStatus(`正在读取 ${apiId} AI 模型列表...`);
+    try {
+      const response = await fetch("/api/ai/models", {
+        body: JSON.stringify({ apiKey: config.apiKey, baseUrl: config.baseUrl }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const data = (await response.json()) as ModelResponse;
+      if (!response.ok) throw new Error(data.error || "连接失败");
+
+      const hasMultipleApis = apiConfigs.length > 1;
+      const nextImageModels = replaceModelsForApi(imageModels, apiId, data.imageModels, hasMultipleApis);
+      const nextTextModels = replaceModelsForApi(textModels, apiId, data.textModels, hasMultipleApis);
+      setImageModels(nextImageModels);
+      setTextModels(nextTextModels);
+      setStatus(`${apiId} AI 连接成功，已读取 ${data.imageModels.length + data.textModels.length} 个模型。`);
+      void persistSettings(apiConfigs, nextImageModels, nextTextModels);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "002 AI 连接失败，请检查配置。");
+      setStatus(error instanceof Error ? error.message : `${apiId} AI 连接失败，请检查配置。`);
     } finally {
       setLoading(false);
     }
@@ -313,6 +356,15 @@ export function SettingsPanel() {
           <p className="truncate text-xs font-semibold text-secondary">配置保存在当前浏览器</p>
         </div>
         <button
+          aria-label="添加 API"
+          className="grid h-8 w-8 place-items-center rounded-full border border-line bg-white text-primary shadow-sm transition hover:bg-[#F4F6FA] active:scale-95"
+          onClick={addApiConfig}
+          title="添加 API"
+          type="button"
+        >
+          <Plus size={17} strokeWidth={2} />
+        </button>
+        <button
           aria-label="关闭设置"
           className="grid h-8 w-8 place-items-center rounded-full text-primary transition hover:bg-[#F4F6FA] active:scale-95"
           onClick={() => setOpen(false)}
@@ -323,31 +375,47 @@ export function SettingsPanel() {
         </button>
       </div>
       <div className="grid gap-3 overflow-y-auto px-4 py-4">
-        <div className="rounded-[12px] border border-line bg-white p-3">
-          <p className="mb-2 text-xs font-bold text-secondary">001 AI</p>
-          <div className="grid gap-3">
-            <Field label="001 AI 服务地址">
-              <input
-                className={inputClassName()}
-                onChange={(event) => updateSettings({ baseUrl: event.currentTarget.value })}
-                placeholder="输入服务地址"
-                value={settings.baseUrl}
-              />
-            </Field>
-            <Field label="001 AI Key">
-              <input
-                className={inputClassName()}
-                onChange={(event) => updateSettings({ apiKey: event.currentTarget.value })}
-                placeholder="输入 API Key"
-                type="password"
-                value={settings.apiKey}
-              />
-            </Field>
+        {apiConfigs.map((config, index) => {
+          const apiId = config.id ?? formatApiConfigId(index);
+          return (
+            <div className={`rounded-[12px] border p-3 ${index === 0 ? "border-line bg-white" : "border-[#F2DFB8] bg-[#FFFCF1]"}`} key={apiId}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className={`text-xs font-bold ${index === 0 ? "text-secondary" : "text-[#8A6A12]"}`}>{apiId} AI</p>
+                {index > 0 ? (
+                  <button
+                    aria-label={`删除 ${apiId} AI`}
+                    className="grid h-7 w-7 place-items-center rounded-full text-secondary transition hover:bg-white hover:text-danger active:scale-95"
+                    onClick={() => removeApiConfig(index)}
+                    title={`删除 ${apiId} AI`}
+                    type="button"
+                  >
+                    <Trash2 size={15} strokeWidth={1.9} />
+                  </button>
+                ) : null}
+              </div>
+              <div className="grid gap-3">
+                <Field label={`${apiId} AI 服务地址`}>
+                  <input
+                    className={inputClassName()}
+                    onChange={(event) => updateApiConfig(index, { baseUrl: event.currentTarget.value })}
+                    placeholder={index === 0 ? "输入服务地址" : "输入新增 API 服务地址"}
+                    value={config.baseUrl}
+                  />
+                </Field>
+                <Field label={`${apiId} AI Key`}>
+                  <input
+                    className={inputClassName()}
+                    onChange={(event) => updateApiConfig(index, { apiKey: event.currentTarget.value })}
+                    placeholder={`输入 ${apiId} AI Key`}
+                    type="password"
+                    value={config.apiKey}
+                  />
+                </Field>
             <div className="flex items-center gap-2 pt-1">
               <button
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-white px-2.5 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB] disabled:text-[#B8C0CC]"
                 disabled={loading}
-                onClick={loadModels}
+                onClick={() => loadModels(index)}
                 type="button"
               >
                 <TestTube2 size={14} strokeWidth={1.9} />
@@ -356,7 +424,7 @@ export function SettingsPanel() {
               <button
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-white px-2.5 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB]"
                 onClick={() => {
-                  void persistSettings();
+                  void persistSettings(apiConfigs, imageModels, textModels);
                   setStatus("已保存到当前浏览器。");
                 }}
                 type="button"
@@ -368,55 +436,10 @@ export function SettingsPanel() {
                 {saveError || status || (savedAt ? `上次保存 ${formatSavedAt(savedAt)}` : "")}
               </span>
             </div>
-          </div>
-        </div>
-        <div className="rounded-[12px] border border-line bg-[#FFFCF1] p-3">
-          <p className="mb-2 text-xs font-bold text-[#8A6A12]">002 AI</p>
-          <div className="grid gap-3">
-            <Field label="002 AI 服务地址">
-              <input
-                className={inputClassName()}
-                onChange={(event) => updateAgnesSettings({ baseUrl: event.currentTarget.value })}
-                placeholder="https://apihub.agnes-ai.com"
-                value={agnesSettings.baseUrl}
-              />
-            </Field>
-            <Field label="002 AI Key">
-              <input
-                className={inputClassName()}
-                onChange={(event) => updateAgnesSettings({ apiKey: event.currentTarget.value })}
-                placeholder="输入 002 AI Key"
-                type="password"
-                value={agnesSettings.apiKey}
-              />
-            </Field>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-white px-2.5 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB] disabled:text-[#B8C0CC]"
-                disabled={loading}
-                onClick={loadAgnesModels}
-                type="button"
-              >
-                <TestTube2 size={14} strokeWidth={1.9} />
-                {loading ? "测试中" : "连接测试"}
-              </button>
-              <button
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-white px-2.5 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB]"
-                onClick={() => {
-                  void persistSettings();
-                  setStatus("已保存到当前浏览器。");
-                }}
-                type="button"
-              >
-                <Save size={14} strokeWidth={1.9} />
-                保存
-              </button>
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-secondary">
-                {saveError || status || (savedAt ? `上次保存 ${formatSavedAt(savedAt)}` : "")}
-              </span>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
         <div className="grid grid-cols-2 gap-2 rounded-[12px] border border-line bg-[#FBFCFE] p-2.5">
           <div>
             <p className="text-[11px] font-bold text-secondary">图像模型</p>

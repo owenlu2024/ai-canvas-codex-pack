@@ -1,10 +1,12 @@
 export interface ClientApiSettings {
   apiKey: string;
   baseUrl: string;
+  id?: string;
 }
 
 export interface ClientStoredApiSettings {
   agnesSettings?: ClientApiSettings;
+  apiConfigs?: ClientApiSettings[];
   imageModels?: string[];
   savedAt?: string;
   settings?: ClientApiSettings;
@@ -25,12 +27,57 @@ const defaultAgnesSettings: ClientApiSettings = {
   baseUrl: "https://apihub.agnes-ai.com"
 };
 
-export function normalizeClientStoredSettings(value: Partial<ClientStoredApiSettings>): ClientStoredApiSettings {
+export function formatApiConfigId(index: number) {
+  return String(index + 1).padStart(3, "0");
+}
+
+function normalizeApiConfig(config: Partial<ClientApiSettings> | undefined, index: number): ClientApiSettings {
+  const fallback = index === 0 ? emptySettings : index === 1 ? defaultAgnesSettings : { apiKey: "", baseUrl: "" };
   return {
-    agnesSettings: { ...defaultAgnesSettings, ...(value.agnesSettings ?? {}) },
+    ...fallback,
+    ...(config ?? {}),
+    id: typeof config?.id === "string" && /^\d{3}$/.test(config.id) ? config.id : formatApiConfigId(index)
+  };
+}
+
+function buildApiConfigs(value: Partial<ClientStoredApiSettings>): ClientApiSettings[] {
+  if (Array.isArray(value.apiConfigs) && value.apiConfigs.length) {
+    return value.apiConfigs.map((config, index) => normalizeApiConfig(config, index));
+  }
+  return [normalizeApiConfig(value.settings, 0)];
+}
+
+export function parseConfiguredModelId(modelId?: string) {
+  const match = typeof modelId === "string" ? modelId.match(/^(\d{3})-(.+)$/) : null;
+  return {
+    apiId: match?.[1],
+    modelId: match?.[2] ?? modelId
+  };
+}
+
+export function getBaseModelId(modelId?: string) {
+  return parseConfiguredModelId(modelId).modelId;
+}
+
+export function getApiSettingsForModel(settings: ClientStoredApiSettings | undefined | null, modelId?: string) {
+  const parsed = parseConfiguredModelId(modelId);
+  const configs = settings?.apiConfigs ?? [];
+  if (parsed.apiId) {
+    return configs.find((config) => config.id === parsed.apiId) ?? settings?.settings;
+  }
+  return settings?.settings;
+}
+
+export function normalizeClientStoredSettings(value: Partial<ClientStoredApiSettings>): ClientStoredApiSettings {
+  const apiConfigs = buildApiConfigs(value);
+  const settings = apiConfigs[0] ?? normalizeApiConfig(value.settings, 0);
+  const agnesSettings = apiConfigs[1] ?? normalizeApiConfig(value.agnesSettings, 1);
+  return {
+    agnesSettings,
+    apiConfigs,
     imageModels: Array.isArray(value.imageModels) ? value.imageModels.filter((model): model is string => typeof model === "string") : [],
     savedAt: typeof value.savedAt === "string" ? value.savedAt : new Date().toISOString(),
-    settings: { ...emptySettings, ...(value.settings ?? {}) },
+    settings,
     textModels: Array.isArray(value.textModels) ? value.textModels.filter((model): model is string => typeof model === "string") : [],
     version: 1
   };
@@ -55,7 +102,8 @@ export function readClientAiSettings(): ClientStoredApiSettings | null {
 export function getClientAiSettingsPayload() {
   try {
     const saved = readClientAiSettings();
-    if (!saved?.settings?.apiKey?.trim() && !saved?.agnesSettings?.apiKey?.trim()) return undefined;
+    const hasApiConfig = saved?.apiConfigs?.some((config) => config.apiKey?.trim());
+    if (!saved?.settings?.apiKey?.trim() && !saved?.agnesSettings?.apiKey?.trim() && !hasApiConfig) return undefined;
     return saved;
   } catch {
     return undefined;
