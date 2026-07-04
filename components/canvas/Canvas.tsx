@@ -587,7 +587,7 @@ export function AiCanvas() {
       const targetHandle = getInputHandleForPortType(targetNode, sourcePortType);
       if (!targetHandle) return;
       const sourceNodes = sourceNode?.selected
-        ? nodes.filter((node) => node.selected)
+        ? nodes.filter((node) => node.selected && Boolean(getOutputHandleForPortType(node, sourcePortType)))
         : sourceNode
           ? [sourceNode]
           : [];

@@ -277,6 +277,7 @@ input {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
+  pointer-events: none !important;
 }
 
 .react-flow__edge-path {

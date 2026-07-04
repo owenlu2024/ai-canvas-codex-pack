@@ -11,6 +11,7 @@ const outputNodeGap = 32;
 const outputNodeColumnGap = 36;
 const outputNodeInitialGap = 56;
 const outputNodeWidth = 320;
+const outputNodeNearbyColumns = 2;
 const imageNodeHeight = 260;
 const promptNodeHeight = 260;
 const generatedOutputRows = 2;
@@ -527,12 +528,7 @@ function findGeneratedOutputPositions(source: Node<CanvasNodeData>, nodes: Node<
   const rows = Math.min(generatedOutputRows, outputCount);
   const groupHeight = rows * imageNodeHeight + (rows - 1) * outputNodeGap;
   const preferredY = source.position.y + (sourceSize.height - groupHeight) / 2;
-  const generatedBySource = nodes.filter((node) => node.data.generatedBy === source.id);
-  const rightOfSource = source.position.x + sourceSize.width + outputNodeInitialGap;
-  const rightOfExistingGenerated = generatedBySource.length
-    ? Math.max(...generatedBySource.map((node) => node.position.x + getNodeSize(node).width)) + outputNodeColumnGap
-    : rightOfSource;
-  const startX = Math.max(rightOfSource, rightOfExistingGenerated);
+  const startX = source.position.x + sourceSize.width + outputNodeInitialGap;
   const existingRects = nodes.map((node) => {
     const size = getNodeSize(node);
     return {
@@ -544,7 +540,7 @@ function findGeneratedOutputPositions(source: Node<CanvasNodeData>, nodes: Node<
   });
   const yOffsets = [0, imageNodeHeight + outputNodeGap, -(imageNodeHeight + outputNodeGap), (imageNodeHeight + outputNodeGap) * 2, -(imageNodeHeight + outputNodeGap) * 2];
 
-  for (let columnOffset = 0; columnOffset < 24; columnOffset += 1) {
+  for (let columnOffset = 0; columnOffset < outputNodeNearbyColumns; columnOffset += 1) {
     for (const yOffset of yOffsets) {
       const baseX = startX + columnOffset * (outputNodeWidth + outputNodeColumnGap);
       const baseY = preferredY + yOffset;
@@ -618,7 +614,7 @@ function findSingleOutputPosition(source: Node<CanvasNodeData>, nodes: Node<Canv
   });
   const yOffsets = [0, size.height + outputNodeGap, -(size.height + outputNodeGap), (size.height + outputNodeGap) * 2, -(size.height + outputNodeGap) * 2];
 
-  for (let columnOffset = 0; columnOffset < 24; columnOffset += 1) {
+  for (let columnOffset = 0; columnOffset < outputNodeNearbyColumns; columnOffset += 1) {
     for (const yOffset of yOffsets) {
       const rect = {
         height: size.height,
