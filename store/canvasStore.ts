@@ -17,10 +17,10 @@ const generatedOutputRows = 2;
 const maxImageNumber = 100;
 const maxReferenceImageInputs = 12;
 const maxTaobaoPlannerImageInputs = 10;
-const generationClientPreviewMaxEdge = 1280;
-const generationClientTotalDataUrlLength = 3_200_000;
-const generationClientMaxSingleDataUrlLength = 900_000;
-const generationClientMinSingleDataUrlLength = 220_000;
+const generationClientPreviewMaxEdge = 2200;
+const generationClientTotalDataUrlLength = 4_000_000;
+const generationClientMaxSingleDataUrlLength = 3_600_000;
+const generationClientMinSingleDataUrlLength = 260_000;
 const taobaoClientPreviewMaxEdge = 1400;
 const generationControllers = new Map<string, AbortController>();
 const deleteAnimationTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -564,12 +564,13 @@ async function prepareGenerationReferenceImageUrl(imageUrl: string, targetDataUr
     const height = image.naturalHeight || image.height;
     if (!width || !height) return imageUrl;
     const variants = [
-      { maxEdge: generationClientPreviewMaxEdge, quality: 0.82 },
-      { maxEdge: 1120, quality: 0.78 },
-      { maxEdge: 960, quality: 0.74 },
+      { maxEdge: generationClientPreviewMaxEdge, quality: 0.9 },
+      { maxEdge: 1800, quality: 0.86 },
+      { maxEdge: 1500, quality: 0.82 },
+      { maxEdge: 1280, quality: 0.78 },
+      { maxEdge: 1024, quality: 0.74 },
       { maxEdge: 800, quality: 0.7 },
-      { maxEdge: 640, quality: 0.68 },
-      { maxEdge: 512, quality: 0.64 }
+      { maxEdge: 640, quality: 0.66 }
     ];
 
     let best = imageUrl;
