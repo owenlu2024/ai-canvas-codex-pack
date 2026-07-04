@@ -7,12 +7,14 @@ import { parseHttpUrl } from "@/lib/urlSafety";
 interface ApiSettings {
   baseUrl: string;
   apiKey: string;
+  id?: string;
 }
 
 interface StoredApiSettings {
   version: 1;
   settings: ApiSettings;
   agnesSettings: ApiSettings;
+  apiConfigs: ApiSettings[];
   imageModels: string[];
   textModels: string[];
   savedAt: string;
@@ -23,33 +25,63 @@ const settingsPath = getCanvasDataPath("api-settings.local.json");
 
 const emptySettings: ApiSettings = {
   apiKey: "",
+  id: "001",
   baseUrl: ""
 };
 
 const defaultAgnesSettings: ApiSettings = {
   apiKey: "",
+  id: "002",
   baseUrl: "https://apihub.agnes-ai.com"
 };
 
-const requiredImageModels = ["gpt-image-2", "gemini-3.1-flash-image-preview", "gemini-3-pro-image-preview", "agnes-image-2.1-flash"];
-const requiredTextModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite-preview", "agnes-2.0-flash"];
+function formatApiConfigId(index: number) {
+  return String(index + 1).padStart(3, "0");
+}
 
-function uniqueStrings(values: unknown[] | undefined, required: string[] = []) {
-  return Array.from(new Set([
-    ...((Array.isArray(values) ? values : []).filter((model): model is string => typeof model === "string" && Boolean(model.trim()))),
-    ...required
-  ])).sort();
+function normalizeApiConfig(config: Partial<ApiSettings> | undefined, index: number): ApiSettings {
+  const fallback = index === 0 ? emptySettings : index === 1 ? defaultAgnesSettings : { apiKey: "", baseUrl: "" };
+  return {
+    ...fallback,
+    ...(config ?? {}),
+    id: typeof config?.id === "string" && /^\d{3}$/.test(config.id) ? config.id : formatApiConfigId(index)
+  };
+}
+
+function normalizeApiConfigs(value: Partial<StoredApiSettings>) {
+  if (Array.isArray(value.apiConfigs) && value.apiConfigs.length) {
+    return value.apiConfigs.map((config, index) => normalizeApiConfig(config, index));
+  }
+  return [normalizeApiConfig(value.settings, 0)];
+}
+
+function uniqueStrings(values: unknown[] | undefined) {
+  return Array.from(new Set(
+    (Array.isArray(values) ? values : []).filter((model): model is string => typeof model === "string" && Boolean(model.trim()))
+  )).sort();
 }
 
 function normalizeStoredSettings(value: Partial<StoredApiSettings>): StoredApiSettings {
+  const apiConfigs = normalizeApiConfigs(value);
   return {
     version: 1,
-    settings: { ...emptySettings, ...(value.settings ?? {}) },
-    agnesSettings: { ...defaultAgnesSettings, ...(value.agnesSettings ?? {}) },
-    imageModels: uniqueStrings(value.imageModels, requiredImageModels),
-    textModels: uniqueStrings(value.textModels, requiredTextModels),
+    settings: apiConfigs[0] ?? emptySettings,
+    agnesSettings: apiConfigs[1] ?? defaultAgnesSettings,
+    apiConfigs,
+    imageModels: uniqueStrings(value.imageModels),
+    textModels: uniqueStrings(value.textModels),
     savedAt: typeof value.savedAt === "string" ? value.savedAt : new Date().toISOString()
   };
+}
+
+function validateApiConfig(config: ApiSettings, label: string) {
+  if (!config.baseUrl.trim()) return null;
+  try {
+    parseHttpUrl(config.baseUrl);
+    return null;
+  } catch {
+    return `${label} 服务地址必须是有效的 http/https 地址，且不能包含用户名或密码。`;
+  }
 }
 
 export async function GET() {
@@ -83,19 +115,9 @@ export async function POST(request: NextRequest) {
       ...body,
       savedAt: new Date().toISOString()
     });
-    if (storedSettings.settings.baseUrl.trim()) {
-      try {
-        parseHttpUrl(storedSettings.settings.baseUrl);
-      } catch {
-        return NextResponse.json({ error: "AI 服务地址必须是有效的 http/https 地址，且不能包含用户名或密码。" }, { status: 400 });
-      }
-    }
-    if (storedSettings.agnesSettings.baseUrl.trim()) {
-      try {
-        parseHttpUrl(storedSettings.agnesSettings.baseUrl);
-      } catch {
-        return NextResponse.json({ error: "Agnes 服务地址必须是有效的 http/https 地址，且不能包含用户名或密码。" }, { status: 400 });
-      }
+    for (const config of storedSettings.apiConfigs) {
+      const error = validateApiConfig(config, `${config.id ?? "AI"} AI`);
+      if (error) return NextResponse.json({ error }, { status: 400 });
     }
 
     await fs.mkdir(settingsDir, { recursive: true });

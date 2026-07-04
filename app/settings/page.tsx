@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Save } from "lucide-react";
 import Link from "next/link";
-
-const storageKey = "ai-canvas-api-settings-v1";
-const legacyStorageKey = "ai-canvas-api-settings";
+import { clientAiSettingsStorageKey as storageKey, legacyClientAiSettingsStorageKey as legacyStorageKey, normalizeClientStoredSettings } from "@/lib/clientAiSettings";
 
 interface ApiSettings {
   baseUrl: string;
   apiKey: string;
+  id?: string;
 }
 
 interface ModelResponse {
@@ -21,20 +20,33 @@ interface ModelResponse {
 interface StoredApiSettings {
   version: 1;
   settings: ApiSettings;
+  agnesSettings?: ApiSettings;
+  apiConfigs?: ApiSettings[];
   imageModels: string[];
   textModels: string[];
   savedAt: string;
 }
 
 const emptySettings: ApiSettings = {
+  id: "001",
   baseUrl: "https://cdn.12ai.org",
   apiKey: ""
 };
 
+function modelBaseId(model: string) {
+  return model.replace(/^\d{3}-/, "");
+}
+
+function replacePrimaryModels(existingModels: string[], loadedModels: string[], hasMultipleApis: boolean) {
+  const nextLoadedModels = loadedModels.map((model) => (hasMultipleApis ? `001-${modelBaseId(model)}` : modelBaseId(model)));
+  const remainingModels = existingModels.filter((model) => hasMultipleApis && !model.startsWith("001-") && /^\d{3}-/.test(model));
+  return Array.from(new Set([...remainingModels, ...nextLoadedModels])).sort();
+}
+
 function readStoredSettings(): StoredApiSettings | null {
   const saved = window.localStorage.getItem(storageKey);
   if (saved) {
-    return JSON.parse(saved) as StoredApiSettings;
+    return normalizeClientStoredSettings(JSON.parse(saved) as Partial<StoredApiSettings>) as StoredApiSettings;
   }
 
   const legacySaved = window.localStorage.getItem(legacyStorageKey);
@@ -44,6 +56,7 @@ function readStoredSettings(): StoredApiSettings | null {
   return {
     version: 1,
     settings: { ...emptySettings, ...legacySettings },
+    apiConfigs: [{ ...emptySettings, ...legacySettings }],
     imageModels: [],
     textModels: [],
     savedAt: new Date().toISOString()
@@ -85,6 +98,7 @@ function inputStyle() {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<ApiSettings>(emptySettings);
+  const [apiConfigs, setApiConfigs] = useState<ApiSettings[]>([emptySettings]);
   const [imageModels, setImageModels] = useState<string[]>([]);
   const [textModels, setTextModels] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -102,6 +116,7 @@ export default function SettingsPage() {
           const saved = (await response.json()) as StoredApiSettings;
           if (!active) return;
           setSettings({ ...emptySettings, ...saved.settings });
+          setApiConfigs(saved.apiConfigs?.length ? saved.apiConfigs : [{ ...emptySettings, ...saved.settings }]);
           setImageModels(saved.imageModels ?? []);
           setTextModels(saved.textModels ?? []);
           setSavedAt(saved.savedAt);
@@ -117,6 +132,7 @@ export default function SettingsPage() {
         const saved = readStoredSettings();
         if (saved) {
           setSettings({ ...emptySettings, ...saved.settings });
+          setApiConfigs(saved.apiConfigs?.length ? saved.apiConfigs : [{ ...emptySettings, ...saved.settings }]);
           setImageModels(saved.imageModels ?? []);
           setTextModels(saved.textModels ?? []);
           setSavedAt(saved.savedAt);
@@ -137,9 +153,15 @@ export default function SettingsPage() {
 
   const persistSettings = useCallback(async (nextSettings = settings, nextImageModels = imageModels, nextTextModels = textModels) => {
     const nextSavedAt = new Date().toISOString();
+    const nextApiConfigs = [
+      { ...nextSettings, id: "001" },
+      ...apiConfigs.slice(1)
+    ];
     const storedSettings: StoredApiSettings = {
       version: 1,
-      settings: nextSettings,
+      settings: nextApiConfigs[0],
+      agnesSettings: nextApiConfigs[1],
+      apiConfigs: nextApiConfigs,
       imageModels: nextImageModels,
       textModels: nextTextModels,
       savedAt: nextSavedAt
@@ -154,7 +176,7 @@ export default function SettingsPage() {
 
     setSavedAt(nextSavedAt);
     setSaveError("");
-  }, [imageModels, settings, textModels]);
+  }, [apiConfigs, imageModels, settings, textModels]);
 
   const saveSettings = () => {
     void persistSettings();
@@ -191,9 +213,12 @@ export default function SettingsPage() {
       const data = (await response.json()) as ModelResponse;
       if (!response.ok) throw new Error(data.error || "连接失败");
 
-      setImageModels(data.imageModels);
-      setTextModels(data.textModels);
+      const nextImageModels = replacePrimaryModels(imageModels, data.imageModels, apiConfigs.length > 1);
+      const nextTextModels = replacePrimaryModels(textModels, data.textModels, apiConfigs.length > 1);
+      setImageModels(nextImageModels);
+      setTextModels(nextTextModels);
       setStatus(`已读取并保存 ${data.imageModels.length + data.textModels.length} 个模型。`);
+      void persistSettings(settings, nextImageModels, nextTextModels);
     } catch (error) {
       setImageModels([]);
       setTextModels([]);

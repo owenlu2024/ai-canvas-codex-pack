@@ -26,11 +26,6 @@ function classifyModel(id: string) {
   return "text";
 }
 
-const requiredTextModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite-preview"];
-const requiredImageModels = ["gpt-image-2", "gemini-3.1-flash-image-preview", "gemini-3-pro-image-preview"];
-const requiredAgnesImageModels = ["agnes-image-2.1-flash"];
-const requiredAgnesTextModels = ["agnes-2.0-flash"];
-
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.filter((value) => Boolean(value.trim())))).sort();
 }
@@ -136,21 +131,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "缺少 AI 服务地址或 API Key。" }, { status: 400 });
     }
 
-    if (body.provider === "agnes") {
-      return NextResponse.json({
-        imageModels: requiredAgnesImageModels,
-        textModels: requiredAgnesTextModels
-      });
-    }
-
-    if (looksLike12AiBaseUrl(rawBaseUrl)) {
-      return NextResponse.json({
-        imageModels: requiredImageModels,
-        source: "12AI 文档推荐模型",
-        textModels: requiredTextModels
-      });
-    }
-
     const errors: string[] = [];
     let result: ModelListResult | null = null;
 
@@ -186,14 +166,8 @@ export async function POST(request: NextRequest) {
     }
 
     const ids = result.ids;
-    const imageModels = uniqueSorted([
-      ...ids.filter((id) => classifyModel(id) === "image"),
-      ...requiredImageModels
-    ]);
-    const textModels = Array.from(new Set([
-      ...ids.filter((id) => classifyModel(id) === "text"),
-      ...requiredTextModels
-    ])).sort();
+    const imageModels = uniqueSorted(ids.filter((id) => classifyModel(id) === "image"));
+    const textModels = uniqueSorted(ids.filter((id) => classifyModel(id) === "text"));
 
     return NextResponse.json({
       imageModels,
