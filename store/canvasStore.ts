@@ -77,9 +77,295 @@ function getRequestedImageCount(params?: Record<string, string>) {
   return Number.isFinite(count) ? Math.min(6, Math.max(1, Math.round(count))) : 1;
 }
 
+function normalizeDirect12AiBaseUrl(value?: string) {
+  const baseUrl = (value || "https://cdn.12ai.org").trim().replace(/\/+$/, "");
+  if (!baseUrl) return "";
+  return baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+}
+
+function is12AiDirectBaseUrl(value?: string) {
+  try {
+    const hostname = new URL(value || "https://cdn.12ai.org").hostname;
+    return hostname === "cdn.12ai.org" || hostname === "api.12ai.org" || hostname.endsWith(".12ai.org");
+  } catch {
+    return false;
+  }
+}
+
+function isDirectGeminiImageModel(model?: unknown) {
+  return model === "gemini-3.1-flash-image-preview" || model === "gemini-3-pro-image-preview";
+}
+
+function isDirectGptImageModel(model?: unknown) {
+  return model === "gpt-image-2";
+}
+
+function getDirectImageCount(value?: string) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.min(6, Math.max(1, Math.round(count))) : 1;
+}
+
+function getDirectGeminiImageSize(params?: Record<string, string>) {
+  const targetWidth = Number.parseInt(params?.targetWidth ?? "", 10);
+  const targetHeight = Number.parseInt(params?.targetHeight ?? "", 10);
+  if (Number.isFinite(targetWidth) && Number.isFinite(targetHeight) && targetWidth > 0 && targetHeight > 0) {
+    const longEdge = Math.max(targetWidth, targetHeight);
+    if (longEdge <= 768) return "512";
+    if (longEdge <= 1536) return "1K";
+    if (longEdge <= 2560) return "2K";
+    return "4K";
+  }
+  const value = params?.resolution ?? "1K";
+  return ["512", "1K", "2K", "4K"].includes(value) ? value : "1K";
+}
+
+function getDirectQuality(value?: string) {
+  const normalized = (value ?? "Auto").toLowerCase();
+  if (["low", "medium", "high"].includes(normalized)) return normalized;
+  return "auto";
+}
+
+function getDirectGptSize(params?: Record<string, string>) {
+  const targetWidth = Number.parseInt(params?.targetWidth ?? "", 10);
+  const targetHeight = Number.parseInt(params?.targetHeight ?? "", 10);
+  if (Number.isFinite(targetWidth) && Number.isFinite(targetHeight) && targetWidth > 0 && targetHeight > 0) {
+    const maxEdge = 3840;
+    const maxPixels = 8294400;
+    const edgeScale = Math.min(1, maxEdge / Math.max(targetWidth, targetHeight));
+    const pixelScale = Math.min(1, Math.sqrt(maxPixels / (targetWidth * targetHeight)));
+    const scale = Math.min(edgeScale, pixelScale);
+    const toMultipleOf16 = (value: number) => Math.max(64, Math.floor(value * scale / 16) * 16);
+    return `${toMultipleOf16(targetWidth)}x${toMultipleOf16(targetHeight)}`;
+  }
+  const resolution = params?.resolution ?? "1K";
+  const ratioLabel = getDirectGeminiAspectRatio(params);
+  const [ratioWidth, ratioHeight] = ratioLabel.split(":").map(Number);
+  const ratioValue = ratioWidth / ratioHeight;
+  const isSquare = ratioWidth === ratioHeight;
+  const longEdge = resolution === "4K" ? 3840 : resolution === "2K" ? 2048 : isSquare ? 1024 : 1536;
+  const width = ratioValue >= 1 ? longEdge : Math.round(longEdge * ratioValue);
+  const height = ratioValue >= 1 ? Math.round(longEdge / ratioValue) : longEdge;
+  const toMultipleOf16 = (value: number) => Math.max(64, Math.floor(value / 16) * 16);
+  return `${toMultipleOf16(width)}x${toMultipleOf16(height)}`;
+}
+
+function getDirectGeminiAspectRatio(params?: Record<string, string>) {
+  const targetWidth = Number.parseInt(params?.targetWidth ?? "", 10);
+  const targetHeight = Number.parseInt(params?.targetHeight ?? "", 10);
+  const rawValue = Number.isFinite(targetWidth) && Number.isFinite(targetHeight) && targetWidth > 0 && targetHeight > 0
+    ? targetWidth / targetHeight
+    : (() => {
+        const match = (params?.aspectRatio ?? "Auto").match(/(\d+):(\d+)/);
+        if (!match) return 1;
+        const width = Number(match[1]);
+        const height = Number(match[2]);
+        return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? width / height : 1;
+      })();
+  const ratios = [
+    { label: "1:1", value: 1 },
+    { label: "2:3", value: 2 / 3 },
+    { label: "3:2", value: 3 / 2 },
+    { label: "3:4", value: 3 / 4 },
+    { label: "4:3", value: 4 / 3 },
+    { label: "4:5", value: 4 / 5 },
+    { label: "5:4", value: 5 / 4 },
+    { label: "9:16", value: 9 / 16 },
+    { label: "16:9", value: 16 / 9 },
+    { label: "21:9", value: 21 / 9 }
+  ];
+  return ratios.reduce((best, ratio) => Math.abs(ratio.value - rawValue) < Math.abs(best.value - rawValue) ? ratio : best, ratios[0]).label;
+}
+
+function getDirectTaskId(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as Record<string, unknown>;
+  const data = record.data && typeof record.data === "object" ? record.data as Record<string, unknown> : {};
+  const candidates = [record.task_id, record.id, record.request_id, data.task_id, data.id];
+  return candidates.find((candidate): candidate is string => typeof candidate === "string" && Boolean(candidate)) ?? "";
+}
+
+function getDirectTaskStatus(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as Record<string, unknown>;
+  const data = record.data && typeof record.data === "object" ? record.data as Record<string, unknown> : {};
+  const status = record.status ?? record.state ?? data.status ?? data.state;
+  return typeof status === "string" ? status.toLowerCase() : "";
+}
+
+function getDirectTaskError(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as Record<string, unknown>;
+  const data = record.data && typeof record.data === "object" ? record.data as Record<string, unknown> : {};
+  const error = record.error ?? record.message ?? data.error ?? data.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") return (error as { message: string }).message;
+  return "";
+}
+
+function collectDirectImages(value: unknown, images: Array<{ url: string }>, keyHint = "", depth = 0, visited = new WeakSet<object>()) {
+  if (!value || depth > 20 || images.length > 32) return;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("data:image/")) {
+      images.push({ url: trimmed });
+      return;
+    }
+    if (/^https?:\/\//.test(trimmed) && ["url", "uri", "image_url", "imageUrl", "file_url", "signed_url", "output_url", "download_url", "output", "outputs", "image", "images", "result", "results"].includes(keyHint)) {
+      images.push({ url: trimmed });
+      return;
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectDirectImages(item, images, keyHint, depth + 1, visited));
+    return;
+  }
+  if (typeof value !== "object" || visited.has(value)) return;
+  visited.add(value);
+  const record = value as Record<string, unknown>;
+  if (typeof record.url === "string") images.push({ url: record.url });
+  if (typeof record.b64_json === "string") images.push({ url: `data:image/png;base64,${record.b64_json.replace(/\s/g, "")}` });
+  const inlineData = (record.inline_data ?? record.inlineData) as Record<string, unknown> | undefined;
+  if (inlineData && typeof inlineData.data === "string") {
+    images.push({ url: `data:${typeof inlineData.mime_type === "string" ? inlineData.mime_type : typeof inlineData.mimeType === "string" ? inlineData.mimeType : "image/png"};base64,${inlineData.data.replace(/\s/g, "")}` });
+  }
+  Object.entries(record).forEach(([key, child]) => collectDirectImages(child, images, key, depth + 1, visited));
+}
+
+function normalizeDirectImages(payload: unknown, expectedCount: number) {
+  const images: Array<{ url: string }> = [];
+  collectDirectImages(payload, images);
+  return Array.from(new Map(images.map((image) => [image.url, image])).values()).slice(0, expectedCount);
+}
+
+async function readDirect12AiPayload(response: Response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+async function readDirect12AiError(response: Response) {
+  const payload = await readDirect12AiPayload(response);
+  const error = getDirectTaskError(payload);
+  return error || `12AI 请求失败：${response.status}`;
+}
+
+async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
+  const model = typeof body.model === "string" ? body.model : "";
+  const aiSettings = body.aiSettings as { settings?: { apiKey?: string; baseUrl?: string } } | undefined;
+  const settings = aiSettings?.settings;
+  const apiKey = settings?.apiKey?.trim() ?? "";
+  const baseUrl = settings?.baseUrl?.trim() || "https://cdn.12ai.org";
+  if (body.mode !== "submit" || (!isDirectGeminiImageModel(model) && !isDirectGptImageModel(model)) || !apiKey || !is12AiDirectBaseUrl(baseUrl)) return null;
+
+  const params = body.params as Record<string, string> | undefined;
+  const prompt = typeof body.prompt === "string" ? body.prompt : "";
+  const images = Array.isArray(body.images) ? body.images.filter((image): image is string => typeof image === "string" && Boolean(image)) : [];
+  const expectedCount = getDirectImageCount(params?.imageCount);
+  const v1BaseUrl = normalizeDirect12AiBaseUrl(baseUrl);
+
+  if (isDirectGptImageModel(model)) {
+    const formData = new FormData();
+    formData.append("model", model);
+    formData.append("prompt", prompt);
+    formData.append("size", getDirectGptSize(params));
+    formData.append("quality", getDirectQuality(params?.quality));
+    formData.append("n", String(expectedCount));
+    formData.append("response_format", "url");
+    await Promise.all(images.map(async (image, index) => {
+      if (image.startsWith("data:")) {
+        const [header, data = ""] = image.split(",", 2);
+        const mimeType = header.match(/^data:([^;]+)/)?.[1] || "image/png";
+        const binary = atob(data.replace(/\s/g, ""));
+        const bytes = new Uint8Array(binary.length);
+        for (let byteIndex = 0; byteIndex < binary.length; byteIndex += 1) bytes[byteIndex] = binary.charCodeAt(byteIndex);
+        formData.append("image", new Blob([bytes], { type: mimeType }), `reference-${index + 1}.${mimeType.split("/")[1] || "png"}`);
+        return;
+      }
+      formData.append("image_url", image);
+    }));
+    const response = await fetch(`${v1BaseUrl}/images/generations`, {
+      body: formData,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      method: "POST",
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(await readDirect12AiError(response));
+    const payload = await readDirect12AiPayload(response);
+    const directImages = normalizeDirectImages(payload, expectedCount);
+    if (!directImages.length) throw new Error("12AI 没有返回图片。");
+    return directImages;
+  }
+
+  const submitEndpoint = `${v1BaseUrl}/task/submit`;
+  const input: Record<string, unknown> = {
+    aspect_ratio: getDirectGeminiAspectRatio(params),
+    image_size: getDirectGeminiImageSize(params),
+    prompt
+  };
+  if (images.length) input.images = images;
+  const submitResponse = await fetch(submitEndpoint, {
+    body: JSON.stringify({ input, model }),
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    method: "POST",
+    signal: controller.signal
+  });
+  if (!submitResponse.ok) throw new Error(await readDirect12AiError(submitResponse));
+  let taskPayload = await readDirect12AiPayload(submitResponse);
+  const taskId = getDirectTaskId(taskPayload);
+  const submitImages = normalizeDirectImages(taskPayload, expectedCount);
+  if (submitImages.length) return submitImages;
+  if (!taskId) throw new Error("12AI 没有返回任务 ID。");
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < hostedImageGenerationMaxWaitMs) {
+    await delay(hostedImageGenerationPollMs, controller.signal);
+    const taskResponse = await fetch(`${v1BaseUrl}/task/${encodeURIComponent(taskId)}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      method: "GET",
+      signal: controller.signal
+    });
+    if (!taskResponse.ok) throw new Error(await readDirect12AiError(taskResponse));
+    taskPayload = await readDirect12AiPayload(taskResponse);
+    const status = getDirectTaskStatus(taskPayload);
+    const taskImages = normalizeDirectImages(taskPayload, expectedCount);
+    if (taskImages.length && ["", "success", "succeeded", "completed", "done", "partial_completed"].includes(status)) return taskImages;
+    if (["success", "succeeded", "completed", "done"].includes(status) && !taskImages.length) throw new Error("12AI 任务已完成，但没有返回图片。");
+    if (["failed", "error", "cancelled", "canceled"].includes(status)) throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
+  }
+  throw new Error("12AI 生成超过 30 分钟仍未返回图片。");
+}
+
+async function prepareProxyGeneratedImagesBody(body: Record<string, unknown>) {
+  if (!Array.isArray(body.images)) return body;
+  const images = body.images.filter((image): image is string => typeof image === "string" && Boolean(image));
+  if (!images.length) return body;
+  return {
+    ...body,
+    images: await prepareGenerationReferenceImageUrls(images)
+  };
+}
+
 async function requestGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
+  try {
+    const directImages = await requestDirect12AiGeneratedImages(body, controller);
+    if (directImages) return directImages;
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+  }
+
+  const proxyBody = await prepareProxyGeneratedImagesBody(body);
   const directResponse = await fetch("/api/ai/generate-image", {
-    body: JSON.stringify(body),
+    body: JSON.stringify(proxyBody),
     headers: { "Content-Type": "application/json" },
     method: "POST",
     signal: controller.signal
