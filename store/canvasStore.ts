@@ -17,6 +17,10 @@ const generatedOutputRows = 2;
 const maxImageNumber = 100;
 const maxReferenceImageInputs = 12;
 const maxTaobaoPlannerImageInputs = 10;
+const generationClientPreviewMaxEdge = 1280;
+const generationClientTotalDataUrlLength = 3_200_000;
+const generationClientMaxSingleDataUrlLength = 900_000;
+const generationClientMinSingleDataUrlLength = 220_000;
 const taobaoClientPreviewMaxEdge = 1400;
 const generationControllers = new Map<string, AbortController>();
 const deleteAnimationTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -541,6 +545,65 @@ async function prepareTaobaoPlannerImageUrl(imageUrl: string) {
   } catch {
     return imageUrl;
   }
+}
+
+function getGenerationReferenceImageTargetLength(imageCount: number) {
+  const safeCount = Math.max(1, imageCount);
+  return Math.max(
+    generationClientMinSingleDataUrlLength,
+    Math.min(generationClientMaxSingleDataUrlLength, Math.floor(generationClientTotalDataUrlLength / safeCount))
+  );
+}
+
+async function prepareGenerationReferenceImageUrl(imageUrl: string, targetDataUrlLength = generationClientMaxSingleDataUrlLength) {
+  if (typeof window === "undefined" || !imageUrl.startsWith("data:image/")) return imageUrl;
+  try {
+    if (imageUrl.length <= targetDataUrlLength) return imageUrl;
+    const image = await loadBrowserImage(imageUrl);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (!width || !height) return imageUrl;
+    const variants = [
+      { maxEdge: generationClientPreviewMaxEdge, quality: 0.82 },
+      { maxEdge: 1120, quality: 0.78 },
+      { maxEdge: 960, quality: 0.74 },
+      { maxEdge: 800, quality: 0.7 },
+      { maxEdge: 640, quality: 0.68 },
+      { maxEdge: 512, quality: 0.64 }
+    ];
+
+    let best = imageUrl;
+    for (const variant of variants) {
+      const scale = Math.min(1, variant.maxEdge / Math.max(width, height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) continue;
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const next = canvas.toDataURL("image/jpeg", variant.quality);
+      if (next.length < best.length) best = next;
+      if (next.length <= targetDataUrlLength) return next;
+    }
+    return best;
+  } catch {
+    return imageUrl;
+  }
+}
+
+async function prepareGenerationReferencePayloads<T extends { url: string }>(images: T[]) {
+  const targetLength = getGenerationReferenceImageTargetLength(images.length);
+  return Promise.all(images.map(async (image) => ({
+    ...image,
+    url: await prepareGenerationReferenceImageUrl(image.url, targetLength)
+  })));
+}
+
+async function prepareGenerationReferenceImageUrls(imageUrls: string[]) {
+  const targetLength = getGenerationReferenceImageTargetLength(imageUrls.length);
+  return Promise.all(imageUrls.map((imageUrl) => prepareGenerationReferenceImageUrl(imageUrl, targetLength)));
 }
 
 function getImageRoleFromPrompt(prompt: string, imageNumber: number) {
@@ -2113,13 +2176,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     let textLayoutStyleSummary = "";
     if (isTextImageLayoutNode && textLayoutStyleReferenceImages.length) {
       try {
+      const compressedStyleReferenceImages = await prepareGenerationReferencePayloads(textLayoutStyleReferenceImages.map((node) => ({
+        imageNumber: typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined,
+        url: node.data.imageUrl as string
+      })));
       const response = await fetch("/api/ai/style-reference-summary", {
         body: JSON.stringify({
             aiSettings: getClientAiSettingsPayload(),
-            images: textLayoutStyleReferenceImages.map((node) => ({
-              imageNumber: typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined,
-              url: node.data.imageUrl
-            })),
+            images: compressedStyleReferenceImages,
             instruction: rolePrompt,
             model: "gemini-2.5-flash",
             sourceNodeId: id
@@ -2182,14 +2246,20 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     previousController?.abort();
     generationControllers.set(id, controller);
     try {
+      const requestImageUrls = await prepareGenerationReferenceImageUrls(
+        referenceImages
+          .map((node) => node.data.imageUrl)
+          .filter((imageUrl): imageUrl is string => Boolean(imageUrl))
+      );
       console.info("[generate-image] sending request", {
         imageCount: referenceImages.length,
+        imagePayloadBytes: requestImageUrls.reduce((total, imageUrl) => total + imageUrl.length, 0),
         model: modelId,
         sourceNodeId: id
       });
       const requestBody = {
         aiSettings: getClientAiSettingsPayload(),
-        images: referenceImages.map((node) => node.data.imageUrl).filter((imageUrl): imageUrl is string => Boolean(imageUrl)),
+        images: requestImageUrls,
         mode: "submit",
         model: modelId,
         params: requestParams,
@@ -2385,14 +2455,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     generationControllers.get(id)?.abort();
     generationControllers.set(id, controller);
     try {
+      const compressedReferenceImages = await prepareGenerationReferencePayloads(referenceImages.map((node) => ({
+        imageNumber: typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined,
+        title: node.data.title,
+        url: node.data.imageUrl as string
+      })));
       const analysisResponse = await fetch("/api/ai/visual-director", {
         body: JSON.stringify({
           aiSettings: getClientAiSettingsPayload(),
-          images: referenceImages.map((node) => ({
-            imageNumber: typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined,
-            title: node.data.title,
-            url: node.data.imageUrl
-          })),
+          images: compressedReferenceImages,
           instruction,
           model: "gemini-2.5-flash",
           params: source.data.modelParams ?? {},
@@ -2416,9 +2487,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const current = get().nodes.find((node) => node.id === id);
       if (current?.data.generationId !== generationId || current.data.runState !== "running") return;
       const params = source.data.modelParams ?? {};
+      const visualRequestImageUrls = await prepareGenerationReferenceImageUrls(
+        referenceImages
+          .map((node) => node.data.imageUrl)
+          .filter((url): url is string => Boolean(url))
+      );
       const visualImages = await requestGeneratedImages({
         aiSettings: getClientAiSettingsPayload(),
-        images: referenceImages.map((node) => node.data.imageUrl).filter((url): url is string => Boolean(url)),
+        images: visualRequestImageUrls,
         mode: "submit",
         model: visualModel,
         params: {
@@ -2548,10 +2624,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     previousController?.abort();
     generationControllers.set(id, controller);
     try {
+      const compressedReferenceImages = await prepareGenerationReferencePayloads(referenceImages);
       const response = await fetch("/api/ai/prompt-image", {
         body: JSON.stringify({
           aiSettings: getClientAiSettingsPayload(),
-          images: referenceImages,
+          images: compressedReferenceImages,
           instruction,
           model: typeof source.data.modelId === "string" ? source.data.modelId : defaultAiPromptModel,
           module: typeof source.data.modelParams?.module === "string" ? source.data.modelParams.module : "Normal",
@@ -2688,10 +2765,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     previousController?.abort();
     generationControllers.set(id, controller);
     try {
+      const compressedReferenceImages = await prepareGenerationReferencePayloads(referenceImages);
       const response = await fetch("/api/ai/scene-director", {
         body: JSON.stringify({
           aiSettings: getClientAiSettingsPayload(),
-          images: referenceImages,
+          images: compressedReferenceImages,
           instruction,
           model: typeof source.data.modelId === "string" ? source.data.modelId : defaultSceneDirectorModel,
           params: source.data.modelParams ?? {},
@@ -2968,10 +3046,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     previousController?.abort();
     generationControllers.set(id, controller);
     try {
+      const compressedReferenceImages = await prepareGenerationReferencePayloads(referenceImages);
       const response = await fetch("/api/ai/industrial-designer", {
         body: JSON.stringify({
           aiSettings: getClientAiSettingsPayload(),
-          images: referenceImages,
+          images: compressedReferenceImages,
           instruction,
           model: typeof source.data.modelId === "string" ? source.data.modelId : defaultIndustrialDesignerModel,
           params: source.data.modelParams ?? {},

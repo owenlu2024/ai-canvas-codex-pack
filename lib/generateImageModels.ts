@@ -175,8 +175,8 @@ export const defaultProductRemixModelId = productRemixModelSpecs[0].id;
 
 export function getReferenceImageLimit(modelId?: string) {
   if (modelId === "gpt-image-2") return 5;
-  if (modelId === "gemini-3.1-flash-image-preview") return 12;
-  if (modelId === "gemini-3-pro-image-preview") return 10;
+  if (modelId === "gemini-3.1-flash-image-preview") return 14;
+  if (modelId === "gemini-3-pro-image-preview") return 14;
   if (modelId === "agnes-image-2.1-flash") return 5;
   return 5;
 }
