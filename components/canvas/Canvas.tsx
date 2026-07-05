@@ -30,11 +30,8 @@ import { ImageNode } from "@/components/nodes/ImageNode";
 import { MultiGenerateNode } from "@/components/nodes/MultiGenerateNode";
 import { PromptNode } from "@/components/nodes/PromptNode";
 import { useDisplayScale } from "@/components/layout/useDisplayScale";
-import { ResolvedImage } from "@/components/shared/ResolvedImage";
-import { useResolvedImageUrl } from "@/components/shared/useResolvedImageUrl";
 import { isSameColorConnection } from "@/lib/connectionRules";
 import { getReadableZoomFloor } from "@/lib/displayScale";
-import { writeImageToConfiguredImageSpace } from "@/lib/imageSpace";
 import { getHandlePortType, portsByNode, type CanvasNodeData, type PortType } from "@/lib/nodeTypes";
 import { buildVisibleTextPromptRichHtml } from "@/lib/promptHighlight";
 import { nextZIndex } from "@/lib/zIndex";
@@ -484,7 +481,6 @@ export function AiCanvas() {
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
   const imagePreviewUrl = useCanvasStore((state) => state.imagePreviewUrl);
-  const resolvedImagePreviewUrl = useResolvedImageUrl(imagePreviewUrl ?? undefined);
   const setImagePreviewUrl = useCanvasStore((state) => state.setImagePreviewUrl);
   const displayScale = useDisplayScale();
 
@@ -684,18 +680,14 @@ export function AiCanvas() {
         .filter((file) => ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.type))
         .forEach((file, index) => {
           const reader = new FileReader();
-          reader.onload = async () => {
-            const dataUrl = String(reader.result);
-            const stored = await writeImageToConfiguredImageSpace(file, { kind: "imports", preferredName: file.name }).catch(() => null);
-            const imageData = stored?.saved
-              ? { imageFileRef: stored.ref, imageUrl: stored.url, runState: "idle" as const }
-              : { imageFileRef: undefined, imageUrl: dataUrl, runState: "idle" as const };
+          reader.onload = () => {
+            const imageUrl = String(reader.result);
             if (index === 0 && fillTargetId) {
-              updateNodeData(fillTargetId, imageData, { record: true });
+              updateNodeData(fillTargetId, { imageUrl, runState: "idle" }, { record: true });
               return;
             }
             const offsetIndex = fillTargetId ? index - 1 : index;
-            addNode("image", { x: canvasPoint.x + offsetIndex * 34, y: canvasPoint.y + offsetIndex * 34 }, imageData);
+            addNode("image", { x: canvasPoint.x + offsetIndex * 34, y: canvasPoint.y + offsetIndex * 34 }, { imageUrl });
           };
           reader.readAsDataURL(file);
         });
@@ -1159,9 +1151,9 @@ export function AiCanvas() {
           wrapperRef={wrapperRef}
         />
       ) : null}
-      {imagePreviewUrl && resolvedImagePreviewUrl ? (
+      {imagePreviewUrl ? (
         <ImageAnnotationEditor
-          imageUrl={resolvedImagePreviewUrl}
+          imageUrl={imagePreviewUrl}
           onClose={() => setImagePreviewUrl(null)}
           onSend={(annotatedImageUrl) => {
             const sourceNode = nodes.find((node) => node.selected && node.data.kind === "image" && node.data.imageUrl === imagePreviewUrl)
@@ -1750,7 +1742,8 @@ function PromptFloatingEditor({
                   index === mentionIndex ? "border-white/45 bg-white/15" : "border-[#E3E7EF] bg-[#F5F6FA]"
                 }`}>
                   {image.imageUrl ? (
-                    <ResolvedImage alt="" className="h-full w-full object-cover" draggable={false} src={image.imageUrl} />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img alt="" className="h-full w-full object-cover" draggable={false} src={image.imageUrl} />
                   ) : (
                     <span className={index === mentionIndex ? "text-[10px] text-white/85" : "text-[10px] text-secondary"}>空</span>
                   )}

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FolderOpen, Plus, Save, Settings, TestTube2, Trash2, X } from "lucide-react";
 import { clientAiSettingsStorageKey as storageKey, formatApiConfigId, legacyClientAiSettingsStorageKey as legacyStorageKey, normalizeClientStoredSettings } from "@/lib/clientAiSettings";
-import { pickImageSpaceFolder, readImageSpaceSettings, saveImageSpaceDirectoryHandle, saveImageSpaceSettings, type ImageSpaceMode } from "@/lib/imageSpace";
 import { useCanvasStore } from "@/store/canvasStore";
 
 interface ApiSettings {
@@ -29,11 +28,21 @@ interface StoredApiSettings {
   savedAt: string;
 }
 
+type ImageSpaceMode = "browser" | "folder";
+
+interface StoredImageSpaceSettings {
+  mode: ImageSpaceMode;
+  folderName?: string;
+  savedAt: string;
+}
+
 const emptySettings: ApiSettings = {
   apiKey: "",
   id: "001",
   baseUrl: "https://cdn.12ai.org"
 };
+
+const imageSpaceStorageKey = "ai-canvas-image-space-v1";
 
 const defaultAgnesSettings: ApiSettings = {
   apiKey: "",
@@ -103,6 +112,31 @@ function readStoredSettings(): StoredApiSettings | null {
   };
 }
 
+function readImageSpaceSettings(): StoredImageSpaceSettings {
+  try {
+    const saved = window.localStorage.getItem(imageSpaceStorageKey);
+    if (saved) {
+      const parsed = JSON.parse(saved) as Partial<StoredImageSpaceSettings>;
+      return {
+        folderName: typeof parsed.folderName === "string" ? parsed.folderName : undefined,
+        mode: parsed.mode === "folder" ? "folder" : "browser",
+        savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : new Date().toISOString()
+      };
+    }
+  } catch {
+    window.localStorage.removeItem(imageSpaceStorageKey);
+  }
+  return { mode: "browser", savedAt: new Date().toISOString() };
+}
+
+function saveImageSpaceSettings(settings: StoredImageSpaceSettings) {
+  try {
+    window.localStorage.setItem(imageSpaceStorageKey, JSON.stringify(settings));
+  } catch {
+    // localStorage can be unavailable in private or restricted browser contexts.
+  }
+}
+
 function formatSavedAt(value: string) {
   if (!value) return "";
   return new Intl.DateTimeFormat("zh-CN", {
@@ -124,6 +158,14 @@ function Field({ children, label }: { children: React.ReactNode; label: string }
 
 function inputClassName() {
   return "h-9 rounded-[10px] border border-line bg-[#FBFCFE] px-3 text-sm font-semibold text-primary outline-none transition focus:border-selected";
+}
+
+async function pickImageSpaceFolder() {
+  const picker = (window as unknown as { showDirectoryPicker?: () => Promise<{ name?: string }> }).showDirectoryPicker;
+  if (!picker) {
+    throw new Error("当前浏览器不支持选择文件夹，请使用 Chrome 或 Edge。");
+  }
+  return picker();
 }
 
 export function SettingsPanel() {
@@ -217,7 +259,6 @@ export function SettingsPanel() {
       const directory = await pickImageSpaceFolder();
       const folderName = directory.name || "已选择文件夹";
       const nextSettings = { folderName, mode: "folder" as const, savedAt: new Date().toISOString() };
-      await saveImageSpaceDirectoryHandle(directory);
       setImageSpaceMode("folder");
       setImageSpaceFolderName(folderName);
       setImageSpaceStatus(`已选择图片空间：${folderName}`);
@@ -446,7 +487,7 @@ export function SettingsPanel() {
               </button>
             </div>
             <p className="text-[11px] font-semibold leading-4 text-secondary">
-              {imageSpaceStatus || "选择文件夹后，拖入图片会备份到 imports，AI 返图会备份到 generated。"}
+              {imageSpaceStatus || "未选择文件夹时，拖入图片和返图继续使用当前浏览器储存。"}
             </p>
           </div>
         </div>

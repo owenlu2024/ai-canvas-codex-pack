@@ -3,7 +3,6 @@ import type { Edge, Node, Viewport, XYPosition } from "@xyflow/react";
 import { getApiSettingsForModel, getBaseModelId, getClientAiSettingsPayload } from "@/lib/clientAiSettings";
 import { addClientGeneratedImages } from "@/lib/clientGeneratedImages";
 import { defaultIndustrialDesignImageModelId, defaultProductRemixModelId, defaultSceneImageModelId, getDefaultIndustrialDesignImageParams, getDefaultProductRemixParams, getDefaultSceneImageParams, getReferenceImageLimit } from "@/lib/generateImageModels";
-import { imageSpaceUrl, resolveImageUrlForAi, writeImageToConfiguredImageSpace } from "@/lib/imageSpace";
 import { nodeLabels, type CanvasNodeData, type NodeKind } from "@/lib/nodeTypes";
 import { nextZIndex } from "@/lib/zIndex";
 
@@ -34,8 +33,6 @@ const defaultTaobaoPageDirectorModel = "gemini-2.5-flash";
 const defaultIndustrialDesignerModel = "gemini-2.5-flash";
 const defaultVisualDirectorModel = "gpt-image-2";
 const defaultGridImageModel = "gpt-image-2";
-
-type GeneratedImageRecord = { imageFileRef?: string; url: string };
 
 function makeNode(id: string, kind: NodeKind, position: XYPosition, zIndex: number, extra?: Partial<CanvasNodeData>): Node<CanvasNodeData> {
   return {
@@ -848,12 +845,10 @@ function getGenerationReferenceImageTargetLength(imageCount: number) {
 }
 
 async function prepareGenerationReferenceImageUrl(imageUrl: string, targetDataUrlLength = generationClientMaxSingleDataUrlLength) {
-  if (typeof window === "undefined") return imageUrl;
-  const resolvedImageUrl = await resolveImageUrlForAi(imageUrl).catch(() => imageUrl);
-  if (!resolvedImageUrl.startsWith("data:image/")) return resolvedImageUrl;
+  if (typeof window === "undefined" || !imageUrl.startsWith("data:image/")) return imageUrl;
   try {
-    if (resolvedImageUrl.length <= targetDataUrlLength) return resolvedImageUrl;
-    const image = await loadBrowserImage(resolvedImageUrl);
+    if (imageUrl.length <= targetDataUrlLength) return imageUrl;
+    const image = await loadBrowserImage(imageUrl);
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
     if (!width || !height) return imageUrl;
@@ -867,7 +862,7 @@ async function prepareGenerationReferenceImageUrl(imageUrl: string, targetDataUr
       { maxEdge: 640, quality: 0.66 }
     ];
 
-    let best = resolvedImageUrl;
+    let best = imageUrl;
     for (const variant of variants) {
       const scale = Math.min(1, variant.maxEdge / Math.max(width, height));
       const canvas = document.createElement("canvas");
@@ -884,7 +879,7 @@ async function prepareGenerationReferenceImageUrl(imageUrl: string, targetDataUr
     }
     return best;
   } catch {
-    return resolvedImageUrl;
+    return imageUrl;
   }
 }
 
@@ -899,18 +894,6 @@ async function prepareGenerationReferencePayloads<T extends { url: string }>(ima
 async function prepareGenerationReferenceImageUrls(imageUrls: string[]) {
   const targetLength = getGenerationReferenceImageTargetLength(imageUrls.length);
   return Promise.all(imageUrls.map((imageUrl) => prepareGenerationReferenceImageUrl(imageUrl, targetLength)));
-}
-
-async function persistGeneratedImagesToImageSpace(images: Array<{ url: string }>): Promise<GeneratedImageRecord[]> {
-  return Promise.all(images.map(async (image, index) => {
-    const result = await writeImageToConfiguredImageSpace(image.url, {
-      kind: "generated",
-      preferredName: `ai-output-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${index + 1}.png`
-    }).catch(() => null);
-    return result?.saved
-      ? { imageFileRef: result.ref, url: result.url }
-      : image;
-  }));
 }
 
 function getImageRoleFromPrompt(prompt: string, imageNumber: number) {
@@ -2119,11 +2102,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         .filter((node) => node.data.motionState !== "deleting")
         .map((node) => {
           const { motionState, ...data } = node.data;
-          const imageFileRef = typeof data.imageFileRef === "string" ? data.imageFileRef : "";
-          const snapshotData = imageFileRef
-            ? { ...data, imageUrl: imageSpaceUrl(imageFileRef) }
-            : data;
-          return { ...node, data: snapshotData, position: { ...node.position } };
+          return { ...node, data, position: { ...node.position } };
         }),
       edges: state.edges
         .filter((edge) => edge.data?.motionState !== "deleting")
@@ -2551,7 +2530,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         }
       : baseRequestParams;
 
-    let images: Array<{ imageFileRef?: string; url: string }>;
+    let images: Array<{ url: string }>;
     const controller = new AbortController();
     const previousController = generationControllers.get(id);
     previousController?.abort();
@@ -2577,13 +2556,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         prompt: requestPrompt,
         sourceNodeId: id
       };
-      images = await persistGeneratedImagesToImageSpace(await requestGeneratedImages(requestBody, controller));
+      images = await requestGeneratedImages(requestBody, controller);
       generationControllers.delete(id);
       const current = get().nodes.find((node) => node.id === id);
       if (current?.data.generationId !== generationId || current.data.runState !== "running") return;
       if (!images.length) throw new Error("AI 服务没有返回图片。");
       addClientGeneratedImages(images.map((image) => ({
-        imageFileRef: image.imageFileRef,
         imageUrl: image.url,
         modelId,
         prompt: requestPrompt,
@@ -2661,7 +2639,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           reservedImageNumbers.add(imageNumber);
           return { image, imageNumber };
         })
-        .filter((item): item is { image: { imageFileRef?: string; url: string }; imageNumber: number } => Boolean(item));
+        .filter((item): item is { image: { url: string }; imageNumber: number } => Boolean(item));
       const outputCount = imagesWithNumbers.length;
       if (!outputCount) {
         return {
@@ -2697,7 +2675,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           {
             generatedBy: id,
             imageNumber,
-            imageFileRef: image.imageFileRef,
             imageUrl: image.url,
             title: source.data.kind === "sceneImage"
               ? source.data.modelParams?.gridEnabled === "true" ? `Scene Grid Image ${String(Math.min(10, promptNodes.length)).padStart(2, "0")}` : "Scene Image"
@@ -2805,7 +2782,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           .map((node) => node.data.imageUrl)
           .filter((url): url is string => Boolean(url))
       );
-      const visualImages = await persistGeneratedImagesToImageSpace(await requestGeneratedImages({
+      const visualImages = await requestGeneratedImages({
         aiSettings: getClientAiSettingsPayload(),
         images: visualRequestImageUrls,
         mode: "submit",
@@ -2817,14 +2794,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         },
         prompt: boardPrompt,
         sourceNodeId: id
-      }, controller));
-      const imageRecords = visualImages
-        .filter((image) => Boolean(image.url))
+      }, controller);
+      const imageUrls = visualImages
+        .map((image) => image.url)
+        .filter(Boolean)
         .slice(0, Math.min(6, Math.max(1, Number.parseInt(source.data.modelParams?.imageCount ?? "1", 10) || 1)));
-      if (!imageRecords.length) throw new Error("AI 服务没有返回视觉规范图。");
-      addClientGeneratedImages(imageRecords.map((image) => ({
-        imageFileRef: image.imageFileRef,
-        imageUrl: image.url,
+      if (!imageUrls.length) throw new Error("AI 服务没有返回视觉规范图。");
+      addClientGeneratedImages(imageUrls.map((imageUrl) => ({
+        imageUrl,
         modelId: visualModel,
         prompt: boardPrompt,
         sourceNodeId: id
@@ -2837,12 +2814,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         if (!currentSource || currentSource.data.generationId !== generationId || currentSource.data.runState !== "running") return state;
         let zIndex = state.globalZIndex;
         const reservedImageNumbers = new Set<number>();
-        const numberedImages = imageRecords.map((image) => {
+        const numberedImages = imageUrls.map((imageUrl) => {
           const imageNumber = getNextImageNumber(cleaned.nodes, reservedImageNumbers);
           if (!imageNumber) return null;
           reservedImageNumbers.add(imageNumber);
-          return { imageFileRef: image.imageFileRef, imageNumber, imageUrl: image.url };
-        }).filter((image): image is { imageFileRef: string | undefined; imageNumber: number; imageUrl: string } => Boolean(image));
+          return { imageNumber, imageUrl };
+        }).filter((image): image is { imageNumber: number; imageUrl: string } => Boolean(image));
         if (!numberedImages.length) {
           return {
             nodes: state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: "Image 图框已达到 100 个上限。", generationId: undefined, runState: "failed" as const } } : node)
@@ -2850,7 +2827,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         }
         const generatedAt = Date.now();
         const outputPositions = findGeneratedOutputPositions(currentSource, cleaned.nodes, numberedImages.length);
-        const outputNodes = numberedImages.map(({ imageFileRef, imageNumber, imageUrl }, index) => {
+        const outputNodes = numberedImages.map(({ imageNumber, imageUrl }, index) => {
           zIndex = nextZIndex(zIndex);
           return makeNode(
             `image-visual-guideline-${generatedAt}-${index}-${Math.round(Math.random() * 1000)}`,
@@ -2859,7 +2836,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             zIndex,
             {
               generatedBy: id,
-              imageFileRef,
               imageNumber,
               imageUrl,
               prompt: boardPrompt,
@@ -2874,7 +2850,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           historyPast: pushHistory(state),
           historyFuture: [],
           nodes: [
-            ...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, imageFileRef: imageRecords[0]?.imageFileRef, imageUrl: imageRecords[0]?.url, prompt: boardPrompt, runState: "completed" as const } } : node),
+            ...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, imageUrl: imageUrls[0], prompt: boardPrompt, runState: "completed" as const } } : node),
             ...outputNodes
           ],
           edges: [

@@ -10,7 +10,6 @@ import { NodeActions } from "@/components/nodes/shared/NodeActions";
 import { NodeHeader } from "@/components/nodes/shared/NodeHeader";
 import { NodePortLayer } from "@/components/nodes/shared/NodePortLayer";
 import { NodeShell } from "@/components/nodes/shared/NodeShell";
-import { ResolvedImage } from "@/components/shared/ResolvedImage";
 import {
   defaultGenerateImageModelId,
   defaultGridImageModelId,
@@ -35,7 +34,6 @@ import {
 } from "@/lib/generateImageModels";
 import { useCanvasStore } from "@/store/canvasStore";
 import { downloadImageToFile } from "@/lib/downloadImage";
-import { writeImageToConfiguredImageSpace } from "@/lib/imageSpace";
 
 interface StoredApiSettings {
   imageModels: string[];
@@ -2010,12 +2008,8 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
   const readImage = (file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = String(reader.result);
-      const stored = await writeImageToConfiguredImageSpace(file, { kind: "imports", preferredName: file.name }).catch(() => null);
-      updateNodeData(id, stored?.saved
-        ? { imageFileRef: stored.ref, imageUrl: stored.url, runState: "idle" }
-        : { imageFileRef: undefined, imageUrl: dataUrl, runState: "idle" }, { record: true });
+    reader.onload = () => {
+      updateNodeData(id, { imageUrl: String(reader.result), runState: "idle" }, { record: true });
     };
     reader.readAsDataURL(file);
   };
@@ -2040,7 +2034,8 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
       type="button"
     >
       {imageUrl ? (
-        <ResolvedImage
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           alt=""
           decoding="async"
           draggable={false}
@@ -2264,7 +2259,7 @@ function PromptTextArea({ id, richHtml, value }: { id: string; richHtml?: string
                 index === mentionIndex ? "border-white/45 bg-white/15" : "border-[#E3E7EF] bg-[#F5F6FA]"
               }`}>
                 {image.imageUrl ? (
-                  <ResolvedImage alt="" className="h-full w-full object-cover" draggable={false} src={image.imageUrl} />
+                  <img alt="" className="h-full w-full object-cover" draggable={false} src={image.imageUrl} />
                 ) : (
                   <span className={index === mentionIndex ? "text-[10px] text-white/85" : "text-[10px] text-secondary"}>空</span>
                 )}

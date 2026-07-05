@@ -2,7 +2,6 @@ import type { CanvasWorkspaceSnapshot } from "@/store/canvasStore";
 
 export interface GeneratedImageBackup {
   id: string;
-  imageFileRef?: string;
   imageUrl: string;
   modelId?: string;
   prompt?: string;

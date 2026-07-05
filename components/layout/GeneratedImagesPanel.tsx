@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Image as ImageIcon, SendHorizontal, Trash2, X } from "lucide-react";
-import { ResolvedImage } from "@/components/shared/ResolvedImage";
 import { useCanvasStore } from "@/store/canvasStore";
 import { readClientGeneratedImages, removeClientGeneratedImages } from "@/lib/clientGeneratedImages";
 import { downloadImageToFile } from "@/lib/downloadImage";
 
 interface GeneratedImageItem {
   id: string;
-  imageFileRef?: string;
   imageUrl: string;
   modelId?: string;
   prompt?: string;
@@ -171,7 +169,6 @@ export function GeneratedImagesPanel() {
       x: (screenX - viewport.x) / zoom,
       y: (screenY - viewport.y) / zoom
     }, {
-      imageFileRef: item.imageFileRef,
       imageUrl: item.imageUrl,
       title: "Image"
     });
@@ -263,7 +260,8 @@ export function GeneratedImagesPanel() {
                     onDoubleClick={() => setPreviewUrl(item.imageUrl)}
                     type="button"
                   >
-                    <ResolvedImage alt="" className="h-full w-full object-contain" decoding="async" draggable={false} loading="lazy" src={item.imageUrl} />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="" className="h-full w-full object-contain" decoding="async" draggable={false} loading="lazy" src={item.imageUrl} />
                   </button>
                   <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-2">
                     <span className="truncate text-[11px] font-semibold text-secondary">{formatSavedAt(item.createdAt)}</span>
@@ -352,7 +350,8 @@ export function GeneratedImagesPanel() {
           >
             <X size={19} strokeWidth={2} />
           </span>
-          <ResolvedImage
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             alt=""
             draggable={false}
             src={previewUrl}

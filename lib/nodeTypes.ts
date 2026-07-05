@@ -14,7 +14,6 @@ export interface Port {
 export interface CanvasNodeData extends Record<string, unknown> {
   kind: NodeKind;
   title: string;
-  imageFileRef?: string;
   imageUrl?: string;
   imageNumber?: number;
   prompt?: string;
