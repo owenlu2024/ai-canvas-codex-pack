@@ -1,3 +1,5 @@
+import { resolveImageUrlForAi } from "@/lib/imageSpace";
+
 function getDownloadUrl(imageUrl: string, filename: string) {
   return /^https?:\/\//.test(imageUrl)
     ? `/api/canvas/image-download?url=${encodeURIComponent(imageUrl)}&filename=${encodeURIComponent(filename)}`
@@ -5,7 +7,8 @@ function getDownloadUrl(imageUrl: string, filename: string) {
 }
 
 export async function downloadImageToFile(imageUrl: string, filename: string) {
-  const response = await fetch(getDownloadUrl(imageUrl, filename));
+  const resolvedImageUrl = await resolveImageUrlForAi(imageUrl).catch(() => imageUrl);
+  const response = await fetch(getDownloadUrl(resolvedImageUrl, filename));
   if (!response.ok) {
     throw new Error(`图片下载失败 (${response.status})`);
   }

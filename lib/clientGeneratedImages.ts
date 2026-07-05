@@ -1,6 +1,9 @@
+import { writeImageToConfiguredImageSpace } from "@/lib/imageSpace";
+
 export interface ClientGeneratedImageBackup {
   createdAt?: string;
   id: string;
+  imageFileRef?: string;
   imageUrl: string;
   modelId?: string;
   prompt?: string;
@@ -26,6 +29,17 @@ function normalizeImages(value: unknown): ClientGeneratedImageBackup[] {
     typeof (image as ClientGeneratedImageBackup).id === "string" &&
     typeof (image as ClientGeneratedImageBackup).imageUrl === "string"
   ));
+}
+
+function getGeneratedImageFilename(image: Partial<ClientGeneratedImageBackup> & { imageUrl: string }, index: number) {
+  const createdAt = image.createdAt ?? new Date().toISOString();
+  const stamp = createdAt.replace(/[-:.TZ]/g, "").slice(0, 14);
+  const suffix = image.imageUrl.startsWith("data:image/jpeg") || image.imageUrl.startsWith("data:image/jpg")
+    ? "jpg"
+    : image.imageUrl.startsWith("data:image/webp")
+      ? "webp"
+      : "png";
+  return `ai-output-${stamp}-${index + 1}.${suffix}`;
 }
 
 function readDeletedImageKeys() {
@@ -68,12 +82,19 @@ export function addClientGeneratedImages(images: Array<Partial<ClientGeneratedIm
     .map((image, index) => ({
       createdAt: image.createdAt ?? createdAt,
       id: image.id ?? `generated-backup-${Date.now()}-${index}-${Math.round(Math.random() * 1000)}`,
+      imageFileRef: image.imageFileRef,
       imageUrl: image.imageUrl,
       modelId: image.modelId,
       prompt: image.prompt,
       sourceNodeId: image.sourceNodeId
     }));
   if (!incoming.length) return current;
+  incoming.forEach((image, index) => {
+    void writeImageToConfiguredImageSpace(image.imageUrl, {
+      kind: "generated",
+      preferredName: getGeneratedImageFilename(image, index)
+    }).catch(() => undefined);
+  });
   const next = [...current, ...incoming];
   writeClientGeneratedImages(next);
   window.dispatchEvent(new CustomEvent("ai-canvas-generated-images-updated"));
@@ -92,4 +113,3 @@ export function removeClientGeneratedImages(ids: string[]) {
   window.dispatchEvent(new CustomEvent("ai-canvas-generated-images-updated"));
   return next;
 }
-
