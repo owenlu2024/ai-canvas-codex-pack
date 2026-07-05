@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FolderOpen, Plus, Save, Settings, TestTube2, Trash2, X } from "lucide-react";
+import { Plus, Save, Settings, TestTube2, Trash2, X } from "lucide-react";
 import { clientAiSettingsStorageKey as storageKey, formatApiConfigId, legacyClientAiSettingsStorageKey as legacyStorageKey, normalizeClientStoredSettings } from "@/lib/clientAiSettings";
 import { useCanvasStore } from "@/store/canvasStore";
 
@@ -28,21 +28,11 @@ interface StoredApiSettings {
   savedAt: string;
 }
 
-type ImageSpaceMode = "browser" | "folder";
-
-interface StoredImageSpaceSettings {
-  mode: ImageSpaceMode;
-  folderName?: string;
-  savedAt: string;
-}
-
 const emptySettings: ApiSettings = {
   apiKey: "",
   id: "001",
   baseUrl: "https://cdn.12ai.org"
 };
-
-const imageSpaceStorageKey = "ai-canvas-image-space-v1";
 
 const defaultAgnesSettings: ApiSettings = {
   apiKey: "",
@@ -112,31 +102,6 @@ function readStoredSettings(): StoredApiSettings | null {
   };
 }
 
-function readImageSpaceSettings(): StoredImageSpaceSettings {
-  try {
-    const saved = window.localStorage.getItem(imageSpaceStorageKey);
-    if (saved) {
-      const parsed = JSON.parse(saved) as Partial<StoredImageSpaceSettings>;
-      return {
-        folderName: typeof parsed.folderName === "string" ? parsed.folderName : undefined,
-        mode: parsed.mode === "folder" ? "folder" : "browser",
-        savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : new Date().toISOString()
-      };
-    }
-  } catch {
-    window.localStorage.removeItem(imageSpaceStorageKey);
-  }
-  return { mode: "browser", savedAt: new Date().toISOString() };
-}
-
-function saveImageSpaceSettings(settings: StoredImageSpaceSettings) {
-  try {
-    window.localStorage.setItem(imageSpaceStorageKey, JSON.stringify(settings));
-  } catch {
-    // localStorage can be unavailable in private or restricted browser contexts.
-  }
-}
-
 function formatSavedAt(value: string) {
   if (!value) return "";
   return new Intl.DateTimeFormat("zh-CN", {
@@ -160,14 +125,6 @@ function inputClassName() {
   return "h-9 rounded-[10px] border border-line bg-[#FBFCFE] px-3 text-sm font-semibold text-primary outline-none transition focus:border-selected";
 }
 
-async function pickImageSpaceFolder() {
-  const picker = (window as unknown as { showDirectoryPicker?: () => Promise<{ name?: string }> }).showDirectoryPicker;
-  if (!picker) {
-    throw new Error("当前浏览器不支持选择文件夹，请使用 Chrome 或 Edge。");
-  }
-  return picker();
-}
-
 export function SettingsPanel() {
   const open = useCanvasStore((state) => state.settingsPanelOpen);
   const setOpen = useCanvasStore((state) => state.setSettingsPanelOpen);
@@ -179,9 +136,6 @@ export function SettingsPanel() {
   const [status, setStatus] = useState("");
   const [savedAt, setSavedAt] = useState("");
   const [saveError, setSaveError] = useState("");
-  const [imageSpaceMode, setImageSpaceMode] = useState<ImageSpaceMode>("browser");
-  const [imageSpaceFolderName, setImageSpaceFolderName] = useState("");
-  const [imageSpaceStatus, setImageSpaceStatus] = useState("");
   const [panelPosition, setPanelPosition] = useState<{ x: number; y: number } | null>(null);
   const [panelDragging, setPanelDragging] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
@@ -201,9 +155,6 @@ export function SettingsPanel() {
     if (!open || hydrated) return;
     let active = true;
     const hydrateSettings = async () => {
-      const imageSpace = readImageSpaceSettings();
-      setImageSpaceMode(imageSpace.mode);
-      setImageSpaceFolderName(imageSpace.folderName ?? "");
       try {
         const saved = readStoredSettings();
         if (saved) {
@@ -246,27 +197,6 @@ export function SettingsPanel() {
       active = false;
     };
   }, [hydrated, open]);
-
-  const updateImageSpaceMode = (mode: ImageSpaceMode) => {
-    const nextSettings = { folderName: imageSpaceFolderName || undefined, mode, savedAt: new Date().toISOString() };
-    setImageSpaceMode(mode);
-    saveImageSpaceSettings(nextSettings);
-    setImageSpaceStatus(mode === "browser" ? "图片继续保存在当前浏览器。" : "请选择一个本地文件夹作为图片空间。");
-  };
-
-  const chooseImageSpaceFolder = async () => {
-    try {
-      const directory = await pickImageSpaceFolder();
-      const folderName = directory.name || "已选择文件夹";
-      const nextSettings = { folderName, mode: "folder" as const, savedAt: new Date().toISOString() };
-      setImageSpaceMode("folder");
-      setImageSpaceFolderName(folderName);
-      setImageSpaceStatus(`已选择图片空间：${folderName}`);
-      saveImageSpaceSettings(nextSettings);
-    } catch (error) {
-      setImageSpaceStatus(error instanceof Error ? error.message : "未选择文件夹。");
-    }
-  };
 
   const persistSettings = useCallback(async (
     nextApiConfigs = apiConfigs,
@@ -445,52 +375,6 @@ export function SettingsPanel() {
         </button>
       </div>
       <div className="grid gap-3 overflow-y-auto px-4 py-4">
-        <div className="rounded-[12px] border border-line bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-xs font-bold text-secondary">图片空间</p>
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-[#EEF1FF] text-selected">
-              <FolderOpen size={15} strokeWidth={1.9} />
-            </span>
-          </div>
-          <div className="grid gap-2.5">
-            <label className="flex items-center gap-2 text-sm font-bold text-primary">
-              <input
-                checked={imageSpaceMode === "browser"}
-                className="h-4 w-4 accent-selected"
-                onChange={() => updateImageSpaceMode("browser")}
-                type="radio"
-              />
-              默认浏览器储存
-            </label>
-            <label className="flex items-center gap-2 text-sm font-bold text-primary">
-              <input
-                checked={imageSpaceMode === "folder"}
-                className="h-4 w-4 accent-selected"
-                onChange={() => updateImageSpaceMode("folder")}
-                type="radio"
-              />
-              自定义本地文件夹
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                className={`${inputClassName()} min-w-0 flex-1 disabled:text-secondary`}
-                disabled
-                value={imageSpaceFolderName ? `已选择：${imageSpaceFolderName}` : "未选择文件夹"}
-              />
-              <button
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-line bg-white px-3 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB] active:scale-95 disabled:text-[#B8C0CC]"
-                disabled={imageSpaceMode !== "folder"}
-                onClick={chooseImageSpaceFolder}
-                type="button"
-              >
-                浏览...
-              </button>
-            </div>
-            <p className="text-[11px] font-semibold leading-4 text-secondary">
-              {imageSpaceStatus || "未选择文件夹时，拖入图片和返图继续使用当前浏览器储存。"}
-            </p>
-          </div>
-        </div>
         {apiConfigs.map((config, index) => {
           const apiId = config.id ?? formatApiConfigId(index);
           return (
