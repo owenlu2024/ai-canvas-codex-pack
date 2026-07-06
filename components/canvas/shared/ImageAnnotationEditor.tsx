@@ -40,6 +40,16 @@ type TransformInteraction = {
   initialTx: number;
   initialTy: number;
 };
+type ResizeHandle = "nw" | "ne" | "sw" | "se";
+type PanelResizeInteraction = {
+  handle: ResizeHandle;
+  height: number;
+  pointerX: number;
+  pointerY: number;
+  width: number;
+  x: number;
+  y: number;
+};
 
 const rotateCursor = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M20.5 8.2A8 8 0 1 0 22 17' fill='none' stroke='%23111827' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='m18 4 3 4.5-5 .8' fill='none' stroke='%23111827' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\") 14 14, grab";
 
@@ -267,6 +277,7 @@ export function ImageAnnotationEditor({ imageUrl, onClose, onSend }: { imageUrl:
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const dragRef = useRef<{ pointerX: number; pointerY: number; x: number; y: number } | null>(null);
+  const panelResizeRef = useRef<PanelResizeInteraction | null>(null);
   const drawingRef = useRef<Annotation | null>(null);
   const transformRef = useRef<TransformInteraction | null>(null);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -289,11 +300,10 @@ export function ImageAnnotationEditor({ imageUrl, onClose, onSend }: { imageUrl:
     if (typeof window === "undefined") return { x: 24, y: 64 };
     return { x: Math.max(24, (window.innerWidth - Math.min(1120, window.innerWidth - 48)) / 2), y: 64 };
   });
-
-  const panelSize = useMemo(() => ({
+  const [panelSize, setPanelSize] = useState(() => ({
     height: typeof window === "undefined" ? 720 : Math.max(420, Math.min(820, window.innerHeight - 96)),
     width: typeof window === "undefined" ? 960 : Math.max(640, Math.min(1120, window.innerWidth - 48))
-  }), []);
+  }));
 
   const redraw = useCallback((options?: { current?: Annotation | null; showSelection?: boolean }) => {
     const canvas = canvasRef.current;
@@ -401,6 +411,62 @@ export function ImageAnnotationEditor({ imageUrl, onClose, onSend }: { imageUrl:
       window.removeEventListener("pointerup", stop);
     };
   }, [panelSize.width]);
+
+  useEffect(() => {
+    const resize = (event: PointerEvent) => {
+      const current = panelResizeRef.current;
+      if (!current) return;
+      event.preventDefault();
+      const dx = event.clientX - current.pointerX;
+      const dy = event.clientY - current.pointerY;
+      const minWidth = 680;
+      const minHeight = 460;
+      const maxWidth = Math.max(minWidth, window.innerWidth - 32);
+      const maxHeight = Math.max(minHeight, window.innerHeight - 32);
+      const right = current.x + current.width;
+      const bottom = current.y + current.height;
+
+      let nextX = current.x;
+      let nextY = current.y;
+      let nextWidth = current.width;
+      let nextHeight = current.height;
+
+      if (current.handle.includes("e")) {
+        nextWidth = Math.min(maxWidth, Math.max(minWidth, current.width + dx));
+      }
+      if (current.handle.includes("s")) {
+        nextHeight = Math.min(maxHeight, Math.max(minHeight, current.height + dy));
+      }
+      if (current.handle.includes("w")) {
+        nextWidth = Math.min(maxWidth, Math.max(minWidth, current.width - dx));
+        nextX = Math.min(right - minWidth, Math.max(16, right - nextWidth));
+        nextWidth = right - nextX;
+      }
+      if (current.handle.includes("n")) {
+        nextHeight = Math.min(maxHeight, Math.max(minHeight, current.height - dy));
+        nextY = Math.min(bottom - minHeight, Math.max(16, bottom - nextHeight));
+        nextHeight = bottom - nextY;
+      }
+
+      if (nextX + nextWidth > window.innerWidth - 16) nextWidth = window.innerWidth - 16 - nextX;
+      if (nextY + nextHeight > window.innerHeight - 16) nextHeight = window.innerHeight - 16 - nextY;
+
+      setPosition({ x: nextX, y: nextY });
+      setPanelSize({
+        height: Math.max(minHeight, nextHeight),
+        width: Math.max(minWidth, nextWidth)
+      });
+    };
+    const stop = () => {
+      panelResizeRef.current = null;
+    };
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", stop);
+    return () => {
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", stop);
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedId || textDraft) return undefined;
@@ -708,6 +774,35 @@ export function ImageAnnotationEditor({ imageUrl, onClose, onSend }: { imageUrl:
       data-image-preview="true"
       style={{ height: panelSize.height, left: position.x, top: position.y, width: panelSize.width }}
     >
+      {(["nw", "ne", "sw", "se"] as ResizeHandle[]).map((handle) => (
+        <button
+          aria-label={`缩放图框 ${handle}`}
+          className={`absolute z-30 h-5 w-5 bg-transparent ${
+            handle === "nw" ? "-left-1.5 -top-1.5 cursor-nwse-resize" :
+            handle === "ne" ? "-right-1.5 -top-1.5 cursor-nesw-resize" :
+            handle === "sw" ? "-bottom-1.5 -left-1.5 cursor-nesw-resize" :
+            "-bottom-1.5 -right-1.5 cursor-nwse-resize"
+          }`}
+          key={handle}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            panelResizeRef.current = {
+              handle,
+              height: panelSize.height,
+              pointerX: event.clientX,
+              pointerY: event.clientY,
+              width: panelSize.width,
+              x: position.x,
+              y: position.y
+            };
+          }}
+          title="拖动缩放图框"
+          type="button"
+        />
+      ))}
       <header
         className="relative flex h-14 shrink-0 cursor-grab items-center border-b border-[#ECEFF5] px-4 active:cursor-grabbing"
         onPointerDown={(event) => {

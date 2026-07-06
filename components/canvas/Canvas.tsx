@@ -929,6 +929,7 @@ export function AiCanvas() {
     <div
       className={`absolute inset-0 ${middlePanning ? "canvas-middle-panning" : ""} ${connectingPortType ? `canvas-connecting canvas-connecting-${connectingPortType}` : ""}`}
       onDoubleClickCapture={(event) => {
+        if (event.button !== 0) return;
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
         if (!target.classList.contains("react-flow__pane")) return;
@@ -1111,7 +1112,7 @@ export function AiCanvas() {
           event.preventDefault();
           setContextMenu(null);
           setActiveEdgeId(null);
-          openAddMenu({ x: event.clientX, y: event.clientY });
+          closeAddMenu();
         }}
         onSelectionStart={(event) => {
           setActiveEdgeId(null);
