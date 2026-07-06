@@ -289,6 +289,11 @@ input {
   stroke-linecap: round;
 }
 
+.ai-canvas-edge-running {
+  stroke-dasharray: 9 8;
+  animation: ai-edge-running 0.9s linear infinite;
+}
+
 .ai-canvas-edge-connected {
   animation: ai-edge-connected 360ms ease-out both;
 }
@@ -311,6 +316,12 @@ input {
   }
 }
 
+@keyframes ai-edge-running {
+  to {
+    stroke-dashoffset: -17;
+  }
+}
+
 @keyframes ai-edge-delete {
   to {
     opacity: 0;
@@ -322,6 +333,7 @@ input {
   .ai-node-duplicating,
   .ai-node-deleting,
   .ai-node-running-border path,
+  .ai-canvas-edge-running,
   .ai-canvas-edge-connected,
   .ai-canvas-edge-deleting {
     animation: none !important;

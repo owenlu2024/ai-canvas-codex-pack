@@ -38,7 +38,7 @@ export function ConnectionLine({ id, sourceX, sourceY, targetX, targetY, sourceP
         strokeWidth={18}
       />
       <BaseEdge
-        className={`ai-canvas-edge ${motionState === "connected" ? "ai-canvas-edge-connected" : ""} ${motionState === "deleting" ? "ai-canvas-edge-deleting" : ""}`}
+        className={`ai-canvas-edge ${locked ? "ai-canvas-edge-running" : ""} ${motionState === "connected" ? "ai-canvas-edge-connected" : ""} ${motionState === "deleting" ? "ai-canvas-edge-deleting" : ""}`}
         id={id}
         interactionWidth={18}
         path={path}
