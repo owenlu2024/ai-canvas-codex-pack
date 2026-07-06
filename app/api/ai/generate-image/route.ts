@@ -400,16 +400,61 @@ interface SubmitContext {
 function buildEqualGridPanelConstraint(params?: Record<string, string>) {
   if (params?.equalGridPanels !== "true") return "";
   const count = Math.max(2, Math.min(10, Number.parseInt(params.gridPanelCount ?? "", 10) || 2));
+  const layout = getEqualGridLayout(count, params);
+  const emptyCellText = layout.capacity > count
+    ? ` The grid has ${layout.capacity - count} unused cell${layout.capacity - count === 1 ? "" : "s"}; keep unused cells neutral/blank or crop them away without resizing any visible panel.`
+    : "";
   return [
     "AUTOMATIC GRID CONSTRAINT - mandatory:",
-    `Because grid mode is enabled, the final image must contain exactly ${count} visible panel${count === 1 ? "" : "s"}.`,
-    "Every visible panel must use the exact same rectangular cell size: identical width and identical height.",
-    "All grid rows must have identical row height. All grid columns must have identical column width.",
-    "Do not create masonry, collage, magazine, hero-plus-thumbnails, uneven row heights, uneven column widths, mixed-size panels, overlapping panels, or any panel that spans multiple rows or columns.",
-    "Keep gutters/dividers consistent in thickness. Keep outer margins even. The grid must look mathematically aligned.",
-    "If the selected panel count leaves unused grid space, keep that space neutral and empty; never stretch or enlarge any visible panel to fill it.",
-    "Each panel image may crop internally to fit its cell, but the cell frame itself must remain the same size as every other cell."
+    `Because grid mode is enabled, first divide the final canvas into an automatic regular grid based on the selected aspect ratio and panel count.`,
+    `For this request, use exactly ${layout.columns} column${layout.columns === 1 ? "" : "s"} by ${layout.rows} row${layout.rows === 1 ? "" : "s"} for ${count} visible panel${count === 1 ? "" : "s"}.${emptyCellText}`,
+    "Every grid cell in that chosen row/column layout must be the same size. Columns share one consistent column width; rows share one consistent row height.",
+    "Each visible panel must occupy exactly one grid cell. Do not let any panel span multiple rows or columns, and do not enlarge a hero panel.",
+    "Do not create masonry, collage, magazine, hero-plus-thumbnails, unequal panels, overlapping panels, uneven gutters, or freeform slicing.",
+    "Keep gutters/dividers consistent in thickness and keep outer margins even. The grid must look like a precise table layout.",
+    "Panel artwork may crop internally to fit its assigned cell, but the cell frame and grid division must stay unchanged."
   ].join("\n");
+}
+
+function getEqualGridLayout(count: number, params?: Record<string, string>) {
+  const aspectRatio = getRequestedAspectRatio(params);
+  let best = { capacity: Number.POSITIVE_INFINITY, columns: count, rows: 1, score: Number.POSITIVE_INFINITY };
+  for (let rows = 1; rows <= count; rows += 1) {
+    const columns = Math.ceil(count / rows);
+    const capacity = rows * columns;
+    const layoutRatio = columns / rows;
+    const unusedCells = capacity - count;
+    const ratioScore = Math.abs(Math.log(layoutRatio / aspectRatio));
+    const emptyPenalty = unusedCells * 0.28;
+    const skinnyPenalty = Math.max(columns / rows, rows / columns) > 4 ? 0.65 : 0;
+    const score = ratioScore + emptyPenalty + skinnyPenalty;
+    if (
+      score < best.score ||
+      (score === best.score && capacity < best.capacity) ||
+      (score === best.score && capacity === best.capacity && columns > best.columns)
+    ) {
+      best = { capacity, columns, rows, score };
+    }
+  }
+  return { capacity: best.capacity, columns: best.columns, rows: best.rows };
+}
+
+function getRequestedAspectRatio(params?: Record<string, string>) {
+  const targetWidth = Number.parseFloat(params?.targetWidth ?? "");
+  const targetHeight = Number.parseFloat(params?.targetHeight ?? "");
+  if (Number.isFinite(targetWidth) && targetWidth > 0 && Number.isFinite(targetHeight) && targetHeight > 0) {
+    return targetWidth / targetHeight;
+  }
+
+  const aspectRatio = params?.aspectRatio ?? "";
+  const match = aspectRatio.match(/(\d+(?:\.\d+)?)\s*[:xX：]\s*(\d+(?:\.\d+)?)/);
+  if (match) {
+    const width = Number.parseFloat(match[1]);
+    const height = Number.parseFloat(match[2]);
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) return width / height;
+  }
+
+  return 1;
 }
 
 interface AsyncGenerationResult {

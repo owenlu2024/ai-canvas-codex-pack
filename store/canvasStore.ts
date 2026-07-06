@@ -1029,13 +1029,13 @@ function buildReferenceAttachmentManifest(referenceImages: Node<CanvasNodeData>[
 
 function getGridLayoutHint(count: number) {
   if (count <= 1) return "one full-frame panel";
-  if (count === 2) return "two equal panels in a clean side-by-side or stacked layout, whichever best fits the selected aspect ratio";
-  if (count === 3) return "three equal panels in one clean row or column, whichever best fits the selected aspect ratio";
-  if (count === 4) return "a clean 2 by 2 grid";
-  if (count === 5) return "a balanced 2 plus 3 or 3 plus 2 grid";
-  if (count === 6) return "a clean 2 by 3 or 3 by 2 grid";
-  if (count <= 9) return "a clean 3 by 3 grid with empty space removed or balanced";
-  return "a clean 2 by 5 or 5 by 2 grid";
+  if (count === 2) return "a regular 2 by 1 or 1 by 2 equal-cell grid, whichever best fits the selected aspect ratio";
+  if (count === 3) return "a regular 3 by 1 or 1 by 3 equal-cell grid, whichever best fits the selected aspect ratio";
+  if (count === 4) return "a regular 2 by 2 equal-cell grid";
+  if (count === 5) return "a regular 3 by 2 or 2 by 3 equal-cell grid template with one unused cell, whichever best fits the selected aspect ratio";
+  if (count === 6) return "a regular 3 by 2 or 2 by 3 equal-cell grid, whichever best fits the selected aspect ratio";
+  if (count <= 9) return "a regular 3 by 3 equal-cell grid template with unused cells kept neutral when needed";
+  return "a regular 5 by 2 or 2 by 5 equal-cell grid, whichever best fits the selected aspect ratio";
 }
 
 function getMainProductLabelsFromPrompt(prompt: string) {
