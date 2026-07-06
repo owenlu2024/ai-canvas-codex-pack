@@ -1029,13 +1029,25 @@ function buildReferenceAttachmentManifest(referenceImages: Node<CanvasNodeData>[
 
 function getGridLayoutHint(count: number) {
   if (count <= 1) return "one full-frame panel";
-  if (count === 2) return "two equal panels in a clean side-by-side or stacked layout, whichever best fits the selected aspect ratio";
-  if (count === 3) return "three equal panels in one clean row or column, whichever best fits the selected aspect ratio";
-  if (count === 4) return "a clean 2 by 2 grid";
-  if (count === 5) return "a balanced 2 plus 3 or 3 plus 2 grid";
-  if (count === 6) return "a clean 2 by 3 or 3 by 2 grid";
-  if (count <= 9) return "a clean 3 by 3 grid with empty space removed or balanced";
-  return "a clean 2 by 5 or 5 by 2 grid";
+  if (count === 2) return "two equal-size cells in a clean 1 by 2 or 2 by 1 grid, whichever best fits the selected aspect ratio";
+  if (count === 3) return "three equal-size cells in a clean 1 by 3 or 3 by 1 grid, whichever best fits the selected aspect ratio";
+  if (count === 4) return "four equal-size cells in a clean 2 by 2 grid";
+  if (count === 5) return "five equal-size cells in a clean 1 by 5, 5 by 1, or 3 by 2 grid with one unused empty cell area; do not enlarge any visible panel";
+  if (count === 6) return "six equal-size cells in a clean 2 by 3 or 3 by 2 grid";
+  if (count <= 9) return `${count} equal-size cells in a clean 3 by 3 grid; any unused cells must stay empty or be cropped out without resizing the visible panels`;
+  return "ten equal-size cells in a clean 2 by 5 or 5 by 2 grid";
+}
+
+function buildEqualGridPanelRules(count: number) {
+  return [
+    "EQUAL GRID PANEL SIZE LOCK - mandatory:",
+    `The final image contains exactly ${count} visible panel${count === 1 ? "" : "s"}, and every visible panel must use the exact same rectangular cell size.`,
+    "All visible panels must have identical width and identical height. All grid rows must have identical row height. All grid columns must have identical column width.",
+    "Do not create masonry, collage, magazine, poster, hero-plus-thumbnails, uneven row heights, uneven column widths, mixed-size panels, overlapping panels, or any panel that spans multiple rows or columns.",
+    "Keep panel gutters/dividers consistent in thickness. The outer margins must be even and the grid must look mathematically aligned.",
+    "If the panel count does not perfectly fill the chosen row/column structure, keep any unused background area neutral and empty; never stretch or enlarge the remaining panels to fill space.",
+    "Each panel image may crop internally to fit its cell, but the cell frame itself must remain the same size as every other cell."
+  ].join("\n");
 }
 
 function getMainProductLabelsFromPrompt(prompt: string) {
@@ -1087,6 +1099,7 @@ function buildGridImagePrompt(promptNodes: Node<CanvasNodeData>[]) {
   return [
     `Create one single image containing ${prompts.length} separate grid panel${prompts.length === 1 ? "" : "s"}.`,
     `Use ${getGridLayoutHint(prompts.length)}.`,
+    buildEqualGridPanelRules(prompts.length),
     productConsistencyLock,
     "Every panel must be visually separated by clean spacing or subtle dividers, but the final result must still be one unified image.",
     "Each panel must follow only its matching prompt below, in the same order as the prompt list.",
@@ -1217,6 +1230,7 @@ function buildSceneGridImagePrompt(promptNodes: Node<CanvasNodeData>[]) {
   return [
     `Create one single scene image containing ${prompts.length} separate grid panel${prompts.length === 1 ? "" : "s"}.`,
     `Use ${getGridLayoutHint(prompts.length)}.`,
+    buildEqualGridPanelRules(prompts.length),
     productConsistencyLock,
     "Every panel must be visually separated by clean spacing or subtle dividers, but the final result must still be one unified image.",
     "Each panel must follow only its matching Scene Director prompt below, in the same order as the prompt list.",
@@ -1365,6 +1379,7 @@ function buildIndustrialDesignGridImagePrompt(promptNodes: Node<CanvasNodeData>[
   return [
     `Create one single industrial design presentation image containing ${prompts.length} separate grid panel${prompts.length === 1 ? "" : "s"}.`,
     `Use ${getGridLayoutHint(prompts.length)}.`,
+    buildEqualGridPanelRules(prompts.length),
     "All panels must follow the same primary base product and fusion reference relationship defined in the INDUSTRIAL DESIGN REFERENCE MAP. Each panel is a different design direction built from the same base + reference fusion system.",
     "In every panel, keep the base product's category and functional architecture recognizable while visibly integrating reference traits. Do not let any panel drift into an unrelated generic product.",
     "Every panel must be visually separated by clean spacing or subtle dividers, but the final result must still be one unified industrial design board.",
@@ -1401,10 +1416,10 @@ function getProductRemixValues(params: Record<string, unknown>) {
 
 function getProductRemixGridLayout(count: number) {
   if (count === 1) return "single full-frame product design image";
-  if (count === 2) return "one image containing 2 equal panels, arranged side-by-side or stacked according to the selected aspect ratio";
-  if (count === 4) return "one image containing a clean 2 by 2 grid";
-  if (count === 6) return "one image containing a clean 2 by 3 or 3 by 2 grid";
-  return "one image containing a clean 3 by 3 grid";
+  if (count === 2) return "one image containing 2 equal-size cells, arranged side-by-side or stacked according to the selected aspect ratio";
+  if (count === 4) return "one image containing 4 equal-size cells in a clean 2 by 2 grid";
+  if (count === 6) return "one image containing 6 equal-size cells in a clean 2 by 3 or 3 by 2 grid";
+  return "one image containing 9 equal-size cells in a clean 3 by 3 grid";
 }
 
 function buildProductRemixPrompt(referenceImages: Node<CanvasNodeData>[], rolePrompt: string, params: Record<string, unknown>) {
@@ -1425,6 +1440,7 @@ function buildProductRemixPrompt(referenceImages: Node<CanvasNodeData>[], rolePr
     rolePrompt,
     "",
     `Output layout: ${getProductRemixGridLayout(remixValues.length)}.`,
+    buildEqualGridPanelRules(remixValues.length),
     "Each panel must show a complete, polished product design render. Keep all panels visually comparable, with consistent camera, lighting, scale, background simplicity, and product presentation.",
     "Remix scale rule: 0 means fully main product; 100 means fully reference product. All listed values are mandatory.",
     ...panelRows,
