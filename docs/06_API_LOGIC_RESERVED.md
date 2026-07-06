@@ -9,8 +9,8 @@
 - 设置页保存 AI 服务地址 / API Key
 - 连接测试读取 `/v1/models`
 - Generate Image 节点调用内部 `/api/ai/generate-image`
-- 无图片输入时转发到兼容 `/v1/images/generations`
-- 有图片输入时转发到兼容 `/v1/images/edits`
+- 图片生成统一提交到异步任务 `/v1/task/submit`
+- 任务完成后从 `/v1/task/{task_id}` 读取输出图片
 - 返回图片后在画布右侧追加 Image 节点
 - 接口返回前，Generate Image 节点保持 running 灯带状态
 - 接口失败时，Generate Image 节点显示错误并停止 running
@@ -96,16 +96,16 @@ AI_DEFAULT_TEXT_MODEL=
 https://doc.12ai.org/docs
 ```
 
-官方文档说明 GPT Image 2 兼容 OpenAI 图片接口格式，生成路径为：
+GPT Image 2 在画布里使用异步任务接口，提交路径为：
 
 ```text
-POST /v1/images/generations
+POST /v1/task/submit
 ```
 
-编辑路径为：
+查询路径为：
 
 ```text
-POST /v1/images/edits
+GET /v1/task/{task_id}
 ```
 
 所有请求认证：
@@ -114,10 +114,25 @@ POST /v1/images/edits
 Authorization: Bearer $API_KEY
 ```
 
-OpenAI 兼容 Base URL：
+12AI Base URL：
 
 ```text
 https://cdn.12ai.org/v1
+```
+
+请求体使用 JSON：
+
+```json
+{
+  "model": "gpt-image-2",
+  "input": {
+    "prompt": "提示词",
+    "images": ["data:image/png;base64,..."],
+    "size": "1024x1024",
+    "quality": "auto",
+    "response_format": "url"
+  }
+}
 ```
 
 ## 6. 后期节点映射

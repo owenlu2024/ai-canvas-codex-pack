@@ -35,7 +35,7 @@ AI Canvas 画布必须优先走异步图片任务，因为前台需要长时间 
 
 | 前台模型 | 内核/接口族 | 画布提交路径 | 请求格式 | 关键参数 | 结果位置 |
 | --- | --- | --- | --- | --- | --- |
-| `gpt-image-2` | GPT Image 2 / OpenAI 图片兼容 | `/v1/task/submit` | `multipart/form-data` | `model`、`prompt`、重复 `image`、像素 `size`、`quality`、`n`、`response_format=url` | 轮询任务 `outputs` |
+| `gpt-image-2` | GPT Image 2 / OpenAI 图片兼容 | `/v1/task/submit` | JSON, `model + input` | `input.prompt`、`input.images`、`input.size`、`input.quality`、`input.n`、`input.response_format=url` | 轮询任务 `outputs` |
 | `gemini-3.1-flash-image-preview` | NanoBanana / Gemini 3.1 Flash 图片 | `/v1/task/submit` | JSON, `model + input` | `input.prompt`、`input.images`、`input.aspect_ratio`、`input.image_size`、`input.n` | 轮询任务 `outputs` |
 | `gemini-3-pro-image-preview` | NanoBanana / Gemini 3 Pro 图片 | `/v1/task/submit` | JSON, `model + input` | `input.prompt`、`input.images`、`input.aspect_ratio`、`input.image_size`、`input.n` | 轮询任务 `outputs` |
 
@@ -53,10 +53,10 @@ AI Canvas 画布运行需要长任务、轮询、返回 URL、写入备份库，
 
 - 提交：`POST /v1/task/submit`
 - 查询：`GET /v1/task/{task_id}`
-- GPT 图片模型用 multipart/form-data 提交。
+- GPT 图片模型用 JSON 提交，采用异步任务文档里的 `model + input` 写法。
 - Gemini 图片模型用 JSON 提交，采用异步任务文档里的 `model + input` 写法。
 
-不要把 Gemini 的 `prompt` 放到任务顶层；顶层 `prompt` 是 GPT Image 2 的 native prompt format，Gemini 会报错。Gemini 图片任务必须把提示词放在 `input.prompt`。
+不要把图片任务的 `prompt` 放到任务顶层；图片任务统一把提示词放在 `input.prompt`。
 
 文生图时不要发送空 `images: []`；生成数量为 1 时不要发送默认 `n: 1`，让上游走默认值。多张生成时才发送 `input.n`，任务可能返回 `partial_completed`。
 
@@ -82,33 +82,53 @@ AI Canvas 画布运行需要长任务、轮询、返回 URL、写入备份库，
 
 ```http
 POST /v1/task/submit
-Content-Type: multipart/form-data
+Content-Type: application/json
 Authorization: Bearer <API Key>
 ```
 
-表单字段：
+JSON 结构：
 
-- `model`: `gpt-image-2`
-- `prompt`: 提示词
-- `image`: 可选，参考图文件；多图时重复该字段
-- `size`: 实际像素尺寸，例如 `1024x1024`、`1536x1024`
-- `quality`: `auto`、`low`、`medium`、`high`
-- `n`: 图片数量
-- `response_format`: `url`
+```json
+{
+  "model": "gpt-image-2",
+  "input": {
+    "prompt": "保留主体，把背景改成明亮的现代办公室",
+    "images": ["data:image/png;base64,<BASE64_IMAGE_DATA>"],
+    "size": "1024x1024",
+    "quality": "high",
+    "response_format": "url"
+  }
+}
+```
+
+字段：
+
+- `input.prompt`: 提示词
+- `input.images`: 可选，参考图 URL、data URI 或 base64；文生图不传
+- `input.size`: 实际像素尺寸，例如 `1024x1024`、`1536x1024`
+- `input.quality`: `auto`、`low`、`medium`、`high`
+- `input.n`: 图片数量；生成 1 张时不传
+- `input.response_format`: `url`
 
 示例：
 
 ```bash
 curl https://cdn.12ai.org/v1/task/submit \
   -H "Authorization: Bearer $API_KEY" \
-  -F "model=gpt-image-2" \
-  -F "prompt=保留主体，把背景改成明亮的现代办公室" \
-  -F "image=@input.png" \
-  -F "size=1024x1024" \
-  -F "quality=high"
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2",
+    "input": {
+      "prompt": "保留主体，把背景改成明亮的现代办公室",
+      "images": ["data:image/png;base64,<BASE64_IMAGE_DATA>"],
+      "size": "1024x1024",
+      "quality": "high",
+      "response_format": "url"
+    }
+  }'
 ```
 
-GPT 同步页 `/v1/images/generations` 的参数格式可用于理解 `size`、`quality` 和返回格式，但本项目提交长任务时使用上面的异步表单方式。
+GPT 同步页 `/v1/images/generations` 的参数格式可用于理解 `size`、`quality` 和返回格式，但本项目提交长任务时使用上面的异步 JSON 任务方式。
 
 ## Gemini 图片模型
 

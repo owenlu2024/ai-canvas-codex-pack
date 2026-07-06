@@ -269,36 +269,50 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
   const v1BaseUrl = normalizeDirect12AiBaseUrl(baseUrl);
 
   if (isDirectGptImageModel(model)) {
-    const formData = new FormData();
-    formData.append("model", model);
-    formData.append("prompt", prompt);
-    formData.append("size", getDirectGptSize(params));
-    formData.append("quality", getDirectQuality(params?.quality));
-    formData.append("n", String(expectedCount));
-    formData.append("response_format", "url");
-    await Promise.all(images.map(async (image, index) => {
-      if (image.startsWith("data:")) {
-        const [header, data = ""] = image.split(",", 2);
-        const mimeType = header.match(/^data:([^;]+)/)?.[1] || "image/png";
-        const binary = atob(data.replace(/\s/g, ""));
-        const bytes = new Uint8Array(binary.length);
-        for (let byteIndex = 0; byteIndex < binary.length; byteIndex += 1) bytes[byteIndex] = binary.charCodeAt(byteIndex);
-        formData.append("image", new Blob([bytes], { type: mimeType }), `reference-${index + 1}.${mimeType.split("/")[1] || "png"}`);
-        return;
-      }
-      formData.append("image_url", image);
-    }));
-    const response = await fetch(`${v1BaseUrl}/images/generations`, {
-      body: formData,
-      headers: { Authorization: `Bearer ${apiKey}` },
+    const input: Record<string, unknown> = {
+      prompt,
+      quality: getDirectQuality(params?.quality),
+      response_format: "url",
+      size: getDirectGptSize(params)
+    };
+    if (images.length) input.images = images;
+    if (expectedCount > 1) input.n = expectedCount;
+    const response = await fetch(`${v1BaseUrl}/task/submit`, {
+      body: JSON.stringify({ input, model }),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
       method: "POST",
       signal: controller.signal
     });
     if (!response.ok) throw new Error(await readDirect12AiError(response));
-    const payload = await readDirect12AiPayload(response);
-    const directImages = normalizeDirectImages(payload, expectedCount);
-    if (!directImages.length) throw new Error("12AI 没有返回图片。");
-    return directImages;
+    let taskPayload = await readDirect12AiPayload(response);
+    const submitImages = normalizeDirectImages(taskPayload, expectedCount);
+    if (submitImages.length) return submitImages;
+    const taskId = getDirectTaskId(taskPayload);
+    if (!taskId) throw new Error("12AI 没有返回任务 ID。");
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < hostedImageGenerationMaxWaitMs) {
+      await delay(hostedImageGenerationPollMs, controller.signal);
+      const taskResponse = await fetch(`${v1BaseUrl}/task/${encodeURIComponent(taskId)}`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        method: "GET",
+        signal: controller.signal
+      });
+      if (!taskResponse.ok) throw new Error(await readDirect12AiError(taskResponse));
+      taskPayload = await readDirect12AiPayload(taskResponse);
+      const status = getDirectTaskStatus(taskPayload);
+      const taskImages = normalizeDirectImages(taskPayload, expectedCount);
+      if (taskImages.length && ["", "success", "succeeded", "completed", "done", "partial_completed"].includes(status)) return taskImages;
+      if (["success", "succeeded", "completed", "done"].includes(status) && !taskImages.length) throw new Error("12AI 任务已完成，但没有返回图片。");
+      if (["failed", "error", "cancelled", "canceled"].includes(status)) throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
+    }
+    throw new Error("12AI 生成超过 30 分钟仍未返回图片。");
   }
 
   const submitEndpoint = `${v1BaseUrl}/task/submit`;

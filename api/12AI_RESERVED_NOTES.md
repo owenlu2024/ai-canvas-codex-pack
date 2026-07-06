@@ -24,10 +24,10 @@ AI_API_KEY=sk-xxxx
 AI_DEFAULT_IMAGE_MODEL=gpt-image-2
 ```
 
-后期图片生成接口示意：
+图片生成接口示意：
 
 ```text
-POST https://cdn.12ai.org/v1/images/generations
+POST https://cdn.12ai.org/v1/task/submit
 Authorization: Bearer $API_KEY
 Content-Type: application/json
 ```
@@ -37,17 +37,18 @@ Content-Type: application/json
 ```json
 {
   "model": "gpt-image-2",
-  "prompt": "产品图，白色背景，商业摄影风格",
-  "size": "1024x1024",
-  "quality": "high",
-  "response_format": "url"
+  "input": {
+    "prompt": "产品图，白色背景，商业摄影风格",
+    "size": "1024x1024",
+    "quality": "high",
+    "response_format": "url"
+  }
 }
 ```
 
-后期图片编辑接口示意：
+带参考图时，把图片 URL、data URI 或 base64 放在 `input.images`，生成结果通过任务查询获取：
 
 ```text
-POST https://cdn.12ai.org/v1/images/edits
+GET https://cdn.12ai.org/v1/task/{task_id}
 Authorization: Bearer $API_KEY
-Content-Type: multipart/form-data
 ```

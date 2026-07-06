@@ -355,24 +355,6 @@ function dataUrlToImageData(value: string) {
   };
 }
 
-async function imageSourceForGptFormData(formData: FormData, value: string, index: number) {
-  const dataUrl = await imageSourceForTask(value);
-  const dataPart = dataUrlToImageData(dataUrl);
-  if (dataPart) {
-    const buffer = Buffer.from(dataPart.data, "base64");
-    formData.append("image", new Blob([buffer], { type: dataPart.mimeType }), `reference-${index + 1}.${dataPart.mimeType.split("/")[1] || "png"}`);
-    return;
-  }
-
-  const response = await fetch(assertSafeRemoteFetchUrl(dataUrl), { signal: AbortSignal.timeout(60000) });
-  if (!response.ok) {
-    throw new Error(`参考图读取失败：${response.status}`);
-  }
-  const contentType = response.headers.get("content-type")?.split(";")[0] || "image/png";
-  const buffer = Buffer.from(await response.arrayBuffer());
-  formData.append("image", new Blob([buffer], { type: contentType }), `reference-${index + 1}.${contentType.split("/")[1] || "png"}`);
-}
-
 async function imageSourceForGeminiPart(value: string) {
   const dataUrl = await imageSourceForTask(value);
   const dataPart = dataUrlToImageData(dataUrl);
@@ -442,22 +424,29 @@ class AiProviderError extends Error {
 async function buildGptImage2Submit(context: SubmitContext): Promise<AsyncSubmit> {
   const size = getGptSize(context.params);
   const quality = getQuality(context.params?.quality);
-  const formData = new FormData();
-  formData.append("model", context.model);
-  formData.append("prompt", context.prompt);
-  formData.append("size", size);
-  formData.append("quality", quality);
-  formData.append("n", String(context.n));
-  formData.append("response_format", "url");
-  await Promise.all(context.imageSources.map((image, index) => imageSourceForGptFormData(formData, image, index)));
+  const images = await Promise.all(context.imageSources.map((image) => imageSourceForTask(image)));
+  const input: Record<string, unknown> = {
+    prompt: context.prompt,
+    quality,
+    response_format: "url",
+    size
+  };
+  if (images.length) input.images = images;
+  if (context.n > 1) input.n = context.n;
+  const requestBody = {
+    input,
+    model: context.model
+  };
   return {
-    body: formData,
+    body: JSON.stringify(requestBody),
     debug: {
-      payload: "gpt-image-2-form-data",
+      imageCount: images.length,
+      payload: "gpt-image-2-input-json",
       quality,
       size
     },
-    headers: {}
+    headers: { "Content-Type": "application/json" },
+    taskSubmitEndpoint: "/task/submit"
   };
 }
 
