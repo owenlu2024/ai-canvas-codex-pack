@@ -397,6 +397,21 @@ interface SubmitContext {
   sourceNodeId?: string;
 }
 
+function buildEqualGridPanelConstraint(params?: Record<string, string>) {
+  if (params?.equalGridPanels !== "true") return "";
+  const count = Math.max(2, Math.min(10, Number.parseInt(params.gridPanelCount ?? "", 10) || 2));
+  return [
+    "AUTOMATIC GRID CONSTRAINT - mandatory:",
+    `Because grid mode is enabled, the final image must contain exactly ${count} visible panel${count === 1 ? "" : "s"}.`,
+    "Every visible panel must use the exact same rectangular cell size: identical width and identical height.",
+    "All grid rows must have identical row height. All grid columns must have identical column width.",
+    "Do not create masonry, collage, magazine, hero-plus-thumbnails, uneven row heights, uneven column widths, mixed-size panels, overlapping panels, or any panel that spans multiple rows or columns.",
+    "Keep gutters/dividers consistent in thickness. Keep outer margins even. The grid must look mathematically aligned.",
+    "If the selected panel count leaves unused grid space, keep that space neutral and empty; never stretch or enlarge any visible panel to fill it.",
+    "Each panel image may crop internally to fit its cell, but the cell frame itself must remain the same size as every other cell."
+  ].join("\n");
+}
+
 interface AsyncGenerationResult {
   debug: Record<string, unknown>;
   imageCount: number;
@@ -1049,12 +1064,14 @@ export async function POST(request: NextRequest) {
     }
 
     const n = getImageCount(body.params?.imageCount);
+    const equalGridPanelConstraint = buildEqualGridPanelConstraint(body.params);
+    const requestPrompt = equalGridPanelConstraint ? `${prompt}\n\n${equalGridPanelConstraint}` : prompt;
     const context: SubmitContext = {
       imageSources,
       model,
       n,
       params: body.params,
-      prompt,
+      prompt: requestPrompt,
       sourceNodeId: body.sourceNodeId
     };
 
