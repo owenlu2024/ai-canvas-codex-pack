@@ -33,6 +33,7 @@ import { useDisplayScale } from "@/components/layout/useDisplayScale";
 import { isSameColorConnection } from "@/lib/connectionRules";
 import { getReadableZoomFloor } from "@/lib/displayScale";
 import { getHandlePortType, portsByNode, type CanvasNodeData, type PortType } from "@/lib/nodeTypes";
+import { getImageDisplayUrl } from "@/lib/imageDisplayUrl";
 import { buildVisibleTextPromptRichHtml } from "@/lib/promptHighlight";
 import { nextZIndex } from "@/lib/zIndex";
 import { type CanvasWorkspaceSnapshot, useCanvasStore } from "@/store/canvasStore";
@@ -1744,7 +1745,16 @@ function PromptFloatingEditor({
                 }`}>
                   {image.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img alt="" className="h-full w-full object-cover" draggable={false} src={image.imageUrl} />
+                    <img
+                      alt=""
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                      onError={(event) => {
+                        if (!image.imageUrl || event.currentTarget.src === image.imageUrl) return;
+                        event.currentTarget.src = image.imageUrl;
+                      }}
+                      src={getImageDisplayUrl(image.imageUrl, "mention-preview.png")}
+                    />
                   ) : (
                     <span className={index === mentionIndex ? "text-[10px] text-white/85" : "text-[10px] text-secondary"}>空</span>
                   )}

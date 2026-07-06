@@ -5,6 +5,7 @@ import { Download, Image as ImageIcon, SendHorizontal, Trash2, X } from "lucide-
 import { useCanvasStore } from "@/store/canvasStore";
 import { readClientGeneratedImages, removeClientGeneratedImages } from "@/lib/clientGeneratedImages";
 import { downloadImageToFile } from "@/lib/downloadImage";
+import { getImageDisplayUrl } from "@/lib/imageDisplayUrl";
 
 interface GeneratedImageItem {
   id: string;
@@ -261,7 +262,18 @@ export function GeneratedImagesPanel() {
                     type="button"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img alt="" className="h-full w-full object-contain" decoding="async" draggable={false} loading="lazy" src={item.imageUrl} />
+                    <img
+                      alt=""
+                      className="h-full w-full object-contain"
+                      decoding="async"
+                      draggable={false}
+                      loading="lazy"
+                      onError={(event) => {
+                        if (event.currentTarget.src === item.imageUrl) return;
+                        event.currentTarget.src = item.imageUrl;
+                      }}
+                      src={getImageDisplayUrl(item.imageUrl, getImageFilename(item))}
+                    />
                   </button>
                   <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-2">
                     <span className="truncate text-[11px] font-semibold text-secondary">{formatSavedAt(item.createdAt)}</span>
@@ -354,7 +366,11 @@ export function GeneratedImagesPanel() {
           <img
             alt=""
             draggable={false}
-            src={previewUrl}
+            onError={(event) => {
+              if (event.currentTarget.src === previewUrl) return;
+              event.currentTarget.src = previewUrl;
+            }}
+            src={getImageDisplayUrl(previewUrl, "generated-preview.png")}
             style={{
               display: "block",
               maxHeight: "100%",

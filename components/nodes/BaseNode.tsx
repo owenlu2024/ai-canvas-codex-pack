@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { getBaseModelId, readClientAiSettings } from "@/lib/clientAiSettings";
+import { getImageDisplayUrl } from "@/lib/imageDisplayUrl";
 import { type CanvasNodeData } from "@/lib/nodeTypes";
 import { buildVisibleTextPromptRichHtml } from "@/lib/promptHighlight";
 import { NodeActions } from "@/components/nodes/shared/NodeActions";
@@ -2000,6 +2001,7 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setImagePreviewUrl = useCanvasStore((state) => state.setImagePreviewUrl);
+  const displayImageUrl = getImageDisplayUrl(imageUrl, "canvas-node-preview.png");
 
   const openPicker = () => {
     inputRef.current?.click();
@@ -2040,7 +2042,11 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
           decoding="async"
           draggable={false}
           loading="lazy"
-          src={imageUrl}
+          onError={(event) => {
+            if (!imageUrl || event.currentTarget.src === imageUrl) return;
+            event.currentTarget.src = imageUrl;
+          }}
+          src={displayImageUrl}
           style={{
             display: "block",
             width: "100%",
@@ -2259,7 +2265,16 @@ function PromptTextArea({ id, richHtml, value }: { id: string; richHtml?: string
                 index === mentionIndex ? "border-white/45 bg-white/15" : "border-[#E3E7EF] bg-[#F5F6FA]"
               }`}>
                 {image.imageUrl ? (
-                  <img alt="" className="h-full w-full object-cover" draggable={false} src={image.imageUrl} />
+                  <img
+                    alt=""
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                    onError={(event) => {
+                      if (!image.imageUrl || event.currentTarget.src === image.imageUrl) return;
+                      event.currentTarget.src = image.imageUrl;
+                    }}
+                    src={getImageDisplayUrl(image.imageUrl, "mention-preview.png")}
+                  />
                 ) : (
                   <span className={index === mentionIndex ? "text-[10px] text-white/85" : "text-[10px] text-secondary"}>空</span>
                 )}
