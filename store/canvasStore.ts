@@ -788,6 +788,24 @@ function getReferenceImageNodes(inputNodes: Node<CanvasNodeData>[], limit = maxR
     .slice(0, limit);
 }
 
+function getConnectedReferenceImageNodes(
+  allNodes: Node<CanvasNodeData>[],
+  inputEdges: Edge[],
+  limit = maxReferenceImageInputs
+) {
+  const imageById = new Map(
+    allNodes
+      .filter((node) => node.data.kind === "image" && node.data.imageUrl)
+      .map((node) => [node.id, node])
+  );
+  return sortNodesVisually(uniqueNodesById(
+    inputEdges
+      .filter((edge) => edge.targetHandle === "image-in")
+      .map((edge) => imageById.get(edge.source))
+      .filter((node): node is Node<CanvasNodeData> => Boolean(node))
+  )).slice(0, limit);
+}
+
 function getPromptScopedReferenceImageNodes(
   allNodes: Node<CanvasNodeData>[],
   promptNodes: Node<CanvasNodeData>[],
@@ -1160,6 +1178,21 @@ function buildReferenceAttachmentManifest(referenceImages: Node<CanvasNodeData>[
     "If a scene reference contains a product/object, ignore that product/object completely. Keep only the scene environment, lighting, surface, background, depth, and atmosphere.",
     "Product words in the prompt, such as category, function, dimensions, or marketing name, are semantic placement notes only. They must not be used to invent or redraw the product appearance.",
     "Use the label mapping above when reading <Image###> mentions. The attachment order is explicitly defined by this map."
+  ].join("\n");
+}
+
+function buildGenerateImageReferenceManifest(referenceImages: Node<CanvasNodeData>[]) {
+  if (!referenceImages.length) return "";
+  const rows = referenceImages.map((node, index) => {
+    const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : index + 1;
+    return `- Attached image ${index + 1} = <Image${String(imageNumber).padStart(3, "0")}>: this is a connected reference image input. Use its subject, composition, camera angle, perspective, silhouette, structure, materials, colors, and key details as the primary visual reference unless the user explicitly says otherwise.`;
+  });
+  return [
+    "REFERENCE ATTACHMENT MAP - mandatory:",
+    ...rows,
+    "The prompt may mention @Image or <Image###>; those labels refer to the attached images above.",
+    "Do not ignore connected reference images. Do not replace them with unrelated scenes, products, people, or subjects.",
+    "When the prompt asks for redraw, high resolution, enhancement, or preservation, keep the referenced image composition and subject identity."
   ].join("\n");
 }
 
@@ -2868,9 +2901,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const modelId = typeof source.data.modelId === "string" ? source.data.modelId : undefined;
     const referenceImageLimit = getReferenceImageLimit(modelId);
     const rhinoPrimaryReferenceImage = isRhinoTestNode ? getRhinoPrimaryReferenceImage(inputEdges, inputNodes, rolePrompt) : undefined;
+    const promptReferenceImages = getPromptScopedReferenceImageNodes(snapshot.nodes, promptNodes, Number.POSITIVE_INFINITY);
+    const connectedReferenceImages = getConnectedReferenceImageNodes(snapshot.nodes, inputEdges, Number.POSITIVE_INFINITY);
     const allReferenceImages = isRhinoTestNode
-      ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(snapshot.nodes, promptNodes, Number.POSITIVE_INFINITY), rhinoPrimaryReferenceImage)
-      : getPromptScopedReferenceImageNodes(snapshot.nodes, promptNodes, Number.POSITIVE_INFINITY);
+      ? orderRhinoReferenceImages(uniqueNodesById([...connectedReferenceImages, ...promptReferenceImages]), rhinoPrimaryReferenceImage)
+      : uniqueNodesById([...connectedReferenceImages, ...promptReferenceImages]);
     if (isRhinoTestNode && !allReferenceImages.length) {
       set((state) => ({
         nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请在 Prompt 里用 @Image 010 这类编号明确指定 Rhino 产品截图。", generationId: undefined, runState: "failed" as const } } : node))
@@ -2983,6 +3018,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ? buildIndustrialDesignReferenceManifest(referenceImages, rolePrompt)
           : isRhinoTestNode
             ? buildRhinoReferenceManifest(referenceImages)
+            : isGenerateImageNode
+              ? buildGenerateImageReferenceManifest(referenceImages)
           : "";
     const requestPrompt = referenceManifest ? `${referenceManifest}\n\n${prompt}` : prompt;
     const promptResolution = isTextImageLayoutNode ? parsePromptResolution(rolePrompt) : null;
@@ -3074,9 +3111,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const promptNodes = inputNodes.filter((node) => typeof node.data.prompt === "string" && node.data.prompt.trim());
       const outputRolePrompt = promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
       const outputRhinoPrimaryReferenceImage = source.data.kind === "rhinoTest" ? getRhinoPrimaryReferenceImage(inputEdges, inputNodes, outputRolePrompt) : undefined;
-      const referenceImages = source.data.kind === "rhinoTest"
-        ? orderRhinoReferenceImages(getPromptScopedReferenceImageNodes(cleaned.nodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined)), outputRhinoPrimaryReferenceImage)
-        : getPromptScopedReferenceImageNodes(cleaned.nodes, promptNodes, getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined));
+      const outputReferenceImageLimit = getReferenceImageLimit(typeof source.data.modelId === "string" ? source.data.modelId : undefined);
+      const outputPromptReferenceImages = getPromptScopedReferenceImageNodes(cleaned.nodes, promptNodes, Number.POSITIVE_INFINITY);
+      const outputConnectedReferenceImages = getConnectedReferenceImageNodes(cleaned.nodes, inputEdges, Number.POSITIVE_INFINITY);
+      const referenceImages = (source.data.kind === "rhinoTest"
+        ? orderRhinoReferenceImages(uniqueNodesById([...outputConnectedReferenceImages, ...outputPromptReferenceImages]), outputRhinoPrimaryReferenceImage)
+        : uniqueNodesById([...outputConnectedReferenceImages, ...outputPromptReferenceImages]))
+        .slice(0, outputReferenceImageLimit);
       const isGenerateImageOutput = source.data.kind === "generateImage";
       const isRhinoTestOutput = source.data.kind === "rhinoTest";
       const isTextImageLayoutOutput = source.data.kind === "textImageLayout";
