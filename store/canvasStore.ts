@@ -1810,6 +1810,7 @@ function syncMentionImageEdges(targetId: string, imageNodes: Node<CanvasNodeData
   const mentionedIds = new Set(imageNodes.map((node) => node.id));
   const prunedEdges = edges.filter((edge) => {
     if (edge.target !== targetId || edge.targetHandle !== "image-in") return true;
+    if (!isAutoMentionImageEdge(edge)) return true;
     return mentionedIds.has(edge.source);
   });
   const missingEdges = createMissingMentionImageEdges(targetId, imageNodes, prunedEdges);
