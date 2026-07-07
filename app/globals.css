@@ -18,6 +18,10 @@
   --node-shadow-hover: 0 8px 24px rgba(15, 23, 42, 0.08);
   --node-shadow-running: 0 10px 30px rgba(108, 99, 255, 0.11);
   --ui-scale: 1;
+  --visual-viewport-left: 0px;
+  --visual-viewport-top: 0px;
+  --visual-viewport-width: 100vw;
+  --visual-viewport-height: 100vh;
 }
 
 * {

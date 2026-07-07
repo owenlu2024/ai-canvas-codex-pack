@@ -39,7 +39,9 @@ const categories: AddNodeCategory[] = [
       { kind: "imageChat", label: "AI Prompt", description: "生图提示词" }
     ],
     imageOptions: [
-      { kind: "generateImage", label: "Generate Image", description: "AI 成图" }
+      { kind: "generateImage", label: "Generate Image", description: "AI 成图" },
+      { kind: "hdRedraw", label: "高清重绘1", description: "生成 B 图和 A Prompt" },
+      { kind: "hdRedraw2", label: "高清重绘2", description: "生成 C 高清图" }
     ]
   },
   {

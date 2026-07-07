@@ -115,8 +115,8 @@ export function ZoomControl() {
       ref={wrapperRef}
       style={{
         position: "fixed",
-        right: 24,
-        bottom: 24,
+        right: "calc(100vw - var(--visual-viewport-left, 0px) - var(--visual-viewport-width, 100vw) + 24px)",
+        bottom: "calc(100vh - var(--visual-viewport-top, 0px) - var(--visual-viewport-height, 100vh) + 24px)",
         zIndex: 2147483001,
         transform: "scale(var(--ui-scale, 1))",
         transformOrigin: "bottom right"

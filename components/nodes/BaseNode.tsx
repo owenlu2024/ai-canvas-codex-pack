@@ -125,13 +125,15 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const canCopyPrompt = data.kind === "prompt" && Boolean(data.prompt?.trim());
   const isAiNode = data.kind === "imageChat" || data.kind === "multiGenerate";
   const isGenerateImageNode = data.kind === "generateImage";
+  const isHdRedrawNode = data.kind === "hdRedraw";
+  const isHdRedraw2Node = data.kind === "hdRedraw2";
   const isRhinoTestNode = data.kind === "rhinoTest";
   const isTextImageLayoutNode = data.kind === "textImageLayout";
   const isGridImageNode = data.kind === "gridImage";
   const isSceneImageNode = data.kind === "sceneImage";
   const isIndustrialDesignImageNode = data.kind === "industrialDesignImage";
   const isProductRemixNode = data.kind === "productRemix";
-  const isImageGeneratorNode = isGenerateImageNode || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isIndustrialDesignImageNode || isProductRemixNode;
+  const isImageGeneratorNode = isGenerateImageNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isIndustrialDesignImageNode || isProductRemixNode;
   const isAiPromptNode = data.kind === "imageChat";
   const isSceneDirectorNode = data.kind === "sceneDirector";
   const isTaobaoPageDirectorNode = data.kind === "taobaoPageDirector";
@@ -143,7 +145,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
   const displayTitle = imageNumber ? `Image ${imageNumber}` : data.title;
   const nodeWidth = isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode ? 620 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const nodeHeight = isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isRhinoTestNode ? 450 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const nodeHeight = isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
 
@@ -301,6 +303,12 @@ function renderContent(id: string, data: CanvasNodeData) {
 
   if (data.kind === "generateImage") {
     return <GenerateImagePanel id={id} data={data} />;
+  }
+  if (data.kind === "hdRedraw") {
+    return <HdRedrawPanel id={id} data={data} step="1" />;
+  }
+  if (data.kind === "hdRedraw2") {
+    return <HdRedrawPanel id={id} data={data} step="2" />;
   }
   if (data.kind === "rhinoTest") {
     return <RhinoTestPanel id={id} data={data} />;
@@ -1184,6 +1192,130 @@ function GenerateImagePanel({ id, data, showGridOption = true }: { id: string; d
           value={params.imageCount ?? "1"}
         />
       )}
+    </div>
+  );
+}
+
+function HdRedrawPanel({ id, data, step }: { id: string; data: CanvasNodeData; step: "1" | "2" }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const imageInputCount = useCanvasStore((state) => state.edges
+    .filter((edge) => edge.target === id && edge.targetHandle === "image-in")
+    .map((edge) => state.nodes.find((node) => node.id === edge.source))
+    .filter((node) => node?.data.kind === "image" && node.data.imageUrl).length
+  );
+  const promptInputCount = useCanvasStore((state) => state.edges
+    .filter((edge) => edge.target === id && edge.targetHandle === "text-in")
+    .map((edge) => state.nodes.find((node) => node.id === edge.source))
+    .filter((node) => typeof node?.data.prompt === "string" && node.data.prompt.trim()).length
+  );
+  const modelOptions = useConfiguredImageModels(generateImageModelIds);
+  const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
+  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
+  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
+  const spec = getGenerateImageModelSpec(modelId);
+  const params: Record<string, string> = { ...getDefaultGenerateImageParams(modelId), imageCount: "1", ...(data.modelParams ?? {}) };
+  const locked = data.runState === "running";
+  const aspectRatioOptions = [
+    "自动",
+    "1:1 方图",
+    "2:3 竖图",
+    "3:2 横图",
+    "3:4 竖图",
+    "4:3 横图",
+    "4:5 竖图",
+    "5:4 横图",
+    "9:16 手机竖图",
+    "16:9 宽屏",
+    "21:9 超宽屏",
+    "4:1 超宽",
+    "1:4 超高",
+    "8:1 极宽",
+    "1:8 极高"
+  ];
+  const qualityOptions = [
+    { label: "自动", value: "Auto" },
+    { label: "低", value: "Low" },
+    { label: "中", value: "Medium" },
+    { label: "高", value: "High" }
+  ];
+  const currentQuality = qualityOptions.find((option) => option.value === params.quality)?.label ?? "自动";
+
+  useEffect(() => {
+    const nextParams = { ...params, gridEnabled: "false", imageCount: "1" };
+    if (data.modelId && data.modelId === modelId && data.modelParams?.imageCount === "1") return;
+    updateNodeData(id, { modelId, modelParams: nextParams });
+  }, [data.modelId, data.modelParams, id, modelId, params, updateNodeData]);
+
+  const updateModel = (nextModelId: string) => {
+    if (locked) return;
+    updateNodeData(id, {
+      modelId: nextModelId,
+      modelParams: {
+        ...getDefaultGenerateImageParams(nextModelId),
+        gridEnabled: "false",
+        imageCount: "1"
+      }
+    });
+  };
+
+  const updateParam = (key: string, value: string) => {
+    if (locked) return;
+    updateNodeData(id, {
+      modelParams: {
+        ...params,
+        [key]: value,
+        gridEnabled: "false",
+        imageCount: "1"
+      }
+    });
+  };
+
+  return (
+    <div className="nodrag nopan nowheel grid gap-3">
+      <div className={`rounded-[12px] border px-4 py-3 text-[12px] font-semibold leading-5 ${
+        imageInputCount && (step === "1" || promptInputCount) ? "border-[#DCE8DF] bg-[#F4FBF6] text-[#3B6F4B]" : "border-[#FFE0B8] bg-[#FFF8ED] text-[#9A5B12]"
+      }`}>
+        {step === "1"
+          ? "第一步：连接 1 张 A 图。运行后输出 B 结构参考图和 A 图 Prompt，并自动连接到高清重绘2。"
+          : `第二步：接收 A 图、B 图和 A 图 Prompt 后运行，输出最终 C 高清重绘图。图片 ${imageInputCount} 张，Prompt ${promptInputCount} 条。`}
+      </div>
+      <GenerateSelect
+        disabled={locked}
+        label="模型"
+        onChange={updateModel}
+        options={modelOptions}
+        renderValue={modelDisplayName}
+        value={modelId}
+      />
+      <GenerateSelect
+        disabled={locked}
+        label="画幅比例"
+        onChange={(value) => updateParam("aspectRatio", value)}
+        options={aspectRatioOptions}
+        value={params.aspectRatio === "Auto" ? "自动" : params.aspectRatio ?? "自动"}
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <GenerateSelect
+          compact
+          disabled={locked}
+          label="分辨率"
+          onChange={(value) => updateParam("resolution", value)}
+          options={spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"]}
+          value={params.resolution ?? "1K"}
+        />
+        {spec.params.some((param) => param.key === "quality") ? (
+          <GenerateSelect
+            compact
+            disabled={locked}
+            label="质量"
+            onChange={(label) => updateParam("quality", qualityOptions.find((option) => option.label === label)?.value ?? "Auto")}
+            options={qualityOptions.map((option) => option.label)}
+            value={currentQuality}
+          />
+        ) : (
+          <div />
+        )}
+      </div>
     </div>
   );
 }

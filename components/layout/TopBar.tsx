@@ -297,12 +297,12 @@ export function TopBar() {
       className="pointer-events-auto fixed left-0 right-0 top-0 z-[2147483001] flex h-[52px] items-center border-b border-line bg-white px-4"
       style={{
         position: "fixed",
-        left: 0,
+        left: "var(--visual-viewport-left, 0px)",
         right: "auto",
-        top: 0,
+        top: "var(--visual-viewport-top, 0px)",
         zIndex: 2147483001,
         display: "flex",
-        width: "calc(100% / var(--ui-scale, 1))",
+        width: "calc(var(--visual-viewport-width, 100vw) / var(--ui-scale, 1))",
         height: 52,
         alignItems: "center",
         borderBottom: "1px solid var(--node-border)",

@@ -103,8 +103,8 @@ export function LeftToolbar() {
       className="pointer-events-auto fixed left-4 top-1/2 z-[2147483001] flex w-[58px] -translate-y-1/2 flex-col items-center rounded-[29px] border border-line bg-white/95 px-[7px] py-3 shadow-soft"
       style={{
         position: "fixed",
-        left: 16,
-        top: "50%",
+        left: "calc(var(--visual-viewport-left, 0px) + 16px)",
+        top: "calc(var(--visual-viewport-top, 0px) + (var(--visual-viewport-height, 100vh) / 2))",
         transform: "translateY(-50%) scale(var(--ui-scale, 1))",
         transformOrigin: "left center",
         zIndex: 2147483001,

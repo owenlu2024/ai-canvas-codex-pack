@@ -1,4 +1,4 @@
-export type NodeKind = "image" | "prompt" | "imageChat" | "sceneDirector" | "taobaoPageDirector" | "industrial_designer" | "visual_director" | "multiGenerate" | "generateImage" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "industrialDesignImage" | "productRemix" | "group";
+export type NodeKind = "image" | "prompt" | "imageChat" | "sceneDirector" | "taobaoPageDirector" | "industrial_designer" | "visual_director" | "multiGenerate" | "generateImage" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "industrialDesignImage" | "productRemix" | "group";
 export type PortType = "image" | "text";
 export type PortDirection = "input" | "output";
 export type RunState = "idle" | "running" | "completed" | "failed";
@@ -78,6 +78,16 @@ export const portsByNode: Record<NodeKind, Port[]> = {
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
   ],
+  hdRedraw: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "image-out", type: "image", direction: "output", color: "#2ECC71" },
+    { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
+  ],
+  hdRedraw2: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
+  ],
   rhinoTest: [
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
@@ -121,6 +131,8 @@ export const nodeLabels: Record<NodeKind, string> = {
   visual_director: "Visual Director",
   multiGenerate: "Multi Generate",
   generateImage: "Generate Image",
+  hdRedraw: "高清重绘1",
+  hdRedraw2: "高清重绘2",
   rhinoTest: "Rhino 测试",
   textImageLayout: "Text Image Layout",
   gridImage: "Generate Grid Image",

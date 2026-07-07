@@ -4,6 +4,7 @@ import { getApiSettingsForModel, getBaseModelId, getClientAiSettingsPayload } fr
 import { addClientGeneratedImages } from "@/lib/clientGeneratedImages";
 import { defaultIndustrialDesignImageModelId, defaultProductRemixModelId, defaultSceneImageModelId, getDefaultIndustrialDesignImageParams, getDefaultProductRemixParams, getDefaultSceneImageParams, getReferenceImageLimit } from "@/lib/generateImageModels";
 import { nodeLabels, type CanvasNodeData, type NodeKind } from "@/lib/nodeTypes";
+import { buildVisibleTextPromptRichHtml } from "@/lib/promptHighlight";
 import { nextZIndex } from "@/lib/zIndex";
 
 const historyLimit = 10;
@@ -52,7 +53,7 @@ function makeNode(id: string, kind: NodeKind, position: XYPosition, zIndex: numb
 }
 
 function isRunningLockingNode(node: Node<CanvasNodeData>) {
-  return (node.data.kind === "generateImage" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director") && node.data.runState === "running";
+  return (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function edgeTouchesRunningLockingNode(edge: Pick<Edge, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
@@ -519,8 +520,8 @@ function makeCopiedNodes(
 function getNodeSize(node: Node<CanvasNodeData>) {
   const isIndustrialAiPrompt = node.data.kind === "imageChat" && node.data.modelParams?.module === "Industrial Design";
   return {
-    height: Number(node.data.height ?? (node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
-    width: Number(node.data.width ?? (node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
+    height: Number(node.data.height ?? (node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" ? 430 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
+    width: Number(node.data.width ?? (node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
   };
 }
 
@@ -590,13 +591,17 @@ function findGeneratedOutputPositions(source: Node<CanvasNodeData>, nodes: Node<
 
 function getConnectedGeneratedOutputIds(sourceId: string, nodes: Node<CanvasNodeData>[], edges: Edge[]) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  return new Set(
-    edges
+  const ids = new Set(
+    nodes
+      .filter((node) => node.data.generatedBy === sourceId)
+      .map((node) => node.id)
+  );
+  edges
       .filter((edge) => edge.source === sourceId)
       .map((edge) => nodeById.get(edge.target))
       .filter((node): node is Node<CanvasNodeData> => Boolean(node && node.data.generatedBy === sourceId))
-      .map((node) => node.id)
-  );
+      .forEach((node) => ids.add(node.id));
+  return ids;
 }
 
 function removeConnectedGeneratedOutputs(state: CanvasState, sourceId: string) {
@@ -974,6 +979,98 @@ function getGenerateImageErrorMessage(error: unknown) {
     return "本地生成服务连接失败，请刷新页面；如果仍失败，请重启本地预览服务后再运行。";
   }
   return error instanceof Error ? error.message : "AI 生成失败。";
+}
+
+const hdRedrawMergePrompt = [
+  "任务：只基于输入的原图 A 生成一张中间结构参考图 B，用于后续高清重绘。B 图必须仍然是 A 图中的同一主体、同一背景、同一构图、同一角度、同一比例和同一可见细节。",
+  "严格禁止：不要生成任何新场景、新街道、新建筑、新招牌、新文字、新道具、新人物、新产品或 A 图中不存在的元素。不要把画面改成插画场景、海报、漫画分镜、城市街景或其他题材。",
+  "结构参考要求：用清晰边界表达 A 图中真实存在的物体轮廓、分区、材质边界和主要细节；边界必须与 A 图逐项对应，不能重新设计、不能改透视、不能改姿态、不能改主体关系。",
+  "固有色参考要求：保留 A 图各区域的真实固有颜色关系，把复杂光影简化为清楚的色块参考；不要改变颜色归属，不要添加新的图案、文字或装饰。",
+  "人物安全要求：如果 A 图包含人物，必须保持人物身份特征、姿态、服装、身体覆盖关系、发型和可见配饰不变；不要进行身体编辑、服饰编辑、暴露程度变化或任何敏感化处理。",
+  "最终只输出一张 B 图：结构边界 + 固有色色块的参考合图。它是 A 图的结构化版本，不是重新创作。"
+].join("\n\n");
+
+function buildHdRedrawReversePromptInstruction(extraPrompt: string) {
+  return [
+    "请反推这张图片用于高清重绘的中文生图 Prompt。",
+    "必须准确描述主体、结构、颜色、材质、细节、镜头角度、透视、构图、光线和画面风格。",
+    "重点锁定原图角度、透视、主体比例、构图位置和所有可见结构，不能要求改变角度或重新设计。",
+    "只输出一段自然中文 Prompt，不要字段模板，不要解释。",
+    extraPrompt ? `用户补充要求：${extraPrompt}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function buildHdRedrawFinalPrompt(reversePrompt: string, extraPrompt: string) {
+  return [
+    "请基于输入的原图 A 和结构色稿合图 B，生成高清重绘图 C。",
+    "必须严格保持原图 A 的主体角度、透视关系、构图位置、物体比例、轮廓结构、边缘形态和可见细节，不得改变镜头角度，不得重新设计，不得增删主体元素。",
+    "使用 B 图只作为内部结构、色块边界和固有色参考，不要把 B 图新增的黑色线稿、描边、轮廓线、草图线、漫画线、CAD 线框或分割线直接渲染到最终 C 图里。",
+    "最终 C 图的线条风格必须严格参考原图 A：如果 A 图是自然照片、真实渲染、无黑色线稿、无描边、无漫画线、无 CAD 线框，那么 C 图也必须无这些线条效果，物体边缘只能由真实光影、材质和焦点清晰度形成。",
+    "只有当 A 图本身明确存在手绘描边、黑边、线稿覆盖、toon outline、ink outline、sketch outline、technical drawing outline、CAD 线框或类似线条风格时，C 图才可以保留同类型、同强度、同位置逻辑的线条效果；不得因为 B 图有线稿而额外增加 A 图没有的线条。",
+    "如果 B 图中有明显黑色结构线，但 A 图没有同类线条风格，最终必须将这些线条融合为真实材质边缘和自然阴影，不能保留可见线条痕迹。",
+    "在不改变画面内容的前提下提升清晰度、边缘干净度、材质质感、细节锐度和整体高清真实感。",
+    reversePrompt ? `原图反推 Prompt：${reversePrompt}` : "",
+    extraPrompt ? `用户补充要求：${extraPrompt}` : "",
+    "最终只输出一张高清重绘成图。"
+  ].filter(Boolean).join("\n\n");
+}
+
+function getImageToken(node: Node<CanvasNodeData>) {
+  return typeof node.data.imageNumber === "number" ? `<Image${String(node.data.imageNumber).padStart(3, "0")}>` : "<Image未编号>";
+}
+
+function stripFinalTags(value: string) {
+  return value
+    .replace(/<\/?final>/gi, "")
+    .replace(/^\s*(?:Prompt|中文\s*Prompt|生图\s*Prompt)[:：]\s*/i, "")
+    .trim();
+}
+
+function buildHdRedrawStep2Prompt(aImage: Node<CanvasNodeData>, bImage: Node<CanvasNodeData>, aPrompt: string, extraPrompt = "") {
+  const aToken = getImageToken(aImage);
+  const bToken = getImageToken(bImage);
+  const cleanPrompt = stripFinalTags(aPrompt);
+  return [
+    `A 图：${aToken}。这是需要高清重绘的原始参考图，必须作为最终 C 图的主参考。`,
+    `B 图：${bToken}。这是由 A 图生成的结构边界 + 固有色色块参考图，只用于辅助理解结构、轮廓、区域边界和颜色归属。`,
+    `A 图内容描述：${cleanPrompt}`,
+    "生成 C 图要求：以 A 图为最终画面标准，严格保持 A 图的主体身份、构图、镜头角度、透视关系、姿态、比例、物体数量、背景关系和所有可见细节，不得新增或删除画面元素。",
+    "使用 B 图时只参考结构边界、色块分区和固有色关系，不要把 B 图新增的线稿、描边、黑边、CAD 线框、漫画线或分割线直接渲染到 C 图里。",
+    "C 图的线条风格必须跟随 A 图：A 图没有线稿描边时，C 图也不能有；只有 A 图本身有线稿/描边/CAD 线框时，C 图才可以保留同类型线条。",
+    "最终输出一张高清重绘 C 图：更清晰、更干净、更高质感，但画面内容和 A 图一致。",
+    extraPrompt ? `用户补充要求：${extraPrompt}` : ""
+  ].filter(Boolean).join("\n\n");
+}
+
+async function requestHdRedrawReversePrompt(sourceNodeId: string, imageNode: Node<CanvasNodeData>, instruction: string, controller: AbortController) {
+  const compressedImages = await prepareGenerationReferencePayloads([{
+    imageNumber: typeof imageNode.data.imageNumber === "number" ? imageNode.data.imageNumber : undefined,
+    url: imageNode.data.imageUrl as string
+  }]);
+  const response = await fetch("/api/ai/prompt-image", {
+    body: JSON.stringify({
+      aiSettings: getClientAiSettingsPayload(),
+      images: compressedImages,
+      instruction,
+      model: defaultAiPromptModel,
+      output: "自然语言",
+      sourceNodeId
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal: controller.signal
+  });
+  const text = await response.text();
+  let payload: { error?: string; prompt?: string };
+  try {
+    payload = JSON.parse(text) as { error?: string; prompt?: string };
+  } catch {
+    throw new Error(response.ok ? "高清重绘反推 Prompt 返回格式异常。" : `高清重绘反推 Prompt 失败：${response.status}`);
+  }
+  if (!response.ok) throw new Error(payload.error || `高清重绘反推 Prompt 失败：${response.status}`);
+  const prompt = payload.prompt?.trim();
+  if (!prompt) throw new Error("高清重绘没有反推出可用 Prompt。");
+  return prompt;
 }
 
 function prepareSceneReferenceImagesForGeneration(referenceImages: Node<CanvasNodeData>[], prompt: string) {
@@ -1759,11 +1856,11 @@ function isGenerateImageOutput(node: Node<CanvasNodeData>, selectedById: Map<str
   if (node.data.kind !== "image") return false;
   if (typeof node.data.generatedBy === "string") {
     const sourceKind = selectedById.get(node.data.generatedBy)?.data.kind;
-    if (sourceKind === "generateImage" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix") return true;
+    if (sourceKind === "generateImage" || sourceKind === "hdRedraw" || sourceKind === "hdRedraw2" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix") return true;
   }
   return edges.some((edge) => {
     const sourceKind = selectedById.get(edge.source)?.data.kind;
-    return edge.target === node.id && (sourceKind === "generateImage" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix" || sourceKind === "visual_director");
+    return edge.target === node.id && (sourceKind === "generateImage" || sourceKind === "hdRedraw" || sourceKind === "hdRedraw2" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix" || sourceKind === "visual_director");
   });
 }
 
@@ -1796,7 +1893,7 @@ function getWorkflowColumns(selectedNodes: Node<CanvasNodeData>[], edges: Edge[]
       aiPrompts.push(node);
       return;
     }
-    if (node.data.kind === "generateImage" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "visual_director") {
+    if (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "visual_director") {
       generators.push(node);
       return;
     }
@@ -1817,7 +1914,7 @@ function getWorkflowColumns(selectedNodes: Node<CanvasNodeData>[], edges: Edge[]
       }) ||
         [...outgoingIds].some((id) => {
           const targetKind = selectedById.get(id)?.data.kind;
-          return targetKind === "generateImage" || targetKind === "rhinoTest" || targetKind === "textImageLayout" || targetKind === "gridImage" || targetKind === "sceneImage" || targetKind === "industrialDesignImage" || targetKind === "productRemix";
+          return targetKind === "generateImage" || targetKind === "hdRedraw" || targetKind === "hdRedraw2" || targetKind === "rhinoTest" || targetKind === "textImageLayout" || targetKind === "gridImage" || targetKind === "sceneImage" || targetKind === "industrialDesignImage" || targetKind === "productRemix";
         });
       if (isSchemePrompt) schemePrompts.push(node);
       else userPrompts.push(node);
@@ -1934,7 +2031,7 @@ function normalizeHydratedNodes(nodes: Node<CanvasNodeData>[]) {
       ...nodeWithCurrentTitle,
       data: {
         ...nodeWithCurrentTitle.data,
-        errorMessage: nodeWithCurrentTitle.data.kind === "generateImage" || nodeWithCurrentTitle.data.kind === "rhinoTest" || nodeWithCurrentTitle.data.kind === "textImageLayout" || nodeWithCurrentTitle.data.kind === "gridImage" || nodeWithCurrentTitle.data.kind === "sceneImage" || nodeWithCurrentTitle.data.kind === "industrialDesignImage" || nodeWithCurrentTitle.data.kind === "productRemix" || nodeWithCurrentTitle.data.kind === "imageChat" || nodeWithCurrentTitle.data.kind === "sceneDirector" || nodeWithCurrentTitle.data.kind === "taobaoPageDirector" || nodeWithCurrentTitle.data.kind === "industrial_designer" || nodeWithCurrentTitle.data.kind === "visual_director" ? "上次生成请求已中断，请重新 Run。" : nodeWithCurrentTitle.data.errorMessage,
+        errorMessage: nodeWithCurrentTitle.data.kind === "generateImage" || nodeWithCurrentTitle.data.kind === "hdRedraw" || nodeWithCurrentTitle.data.kind === "hdRedraw2" || nodeWithCurrentTitle.data.kind === "rhinoTest" || nodeWithCurrentTitle.data.kind === "textImageLayout" || nodeWithCurrentTitle.data.kind === "gridImage" || nodeWithCurrentTitle.data.kind === "sceneImage" || nodeWithCurrentTitle.data.kind === "industrialDesignImage" || nodeWithCurrentTitle.data.kind === "productRemix" || nodeWithCurrentTitle.data.kind === "imageChat" || nodeWithCurrentTitle.data.kind === "sceneDirector" || nodeWithCurrentTitle.data.kind === "taobaoPageDirector" || nodeWithCurrentTitle.data.kind === "industrial_designer" || nodeWithCurrentTitle.data.kind === "visual_director" ? "上次生成请求已中断，请重新 Run。" : nodeWithCurrentTitle.data.errorMessage,
         generationId: undefined,
         runState: "failed" as const
       }
@@ -2284,6 +2381,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             }
         : kind === "gridImage"
           ? { modelId: defaultGridImageModel, modelParams: { aspectRatio: "Auto", resolution: "1K", quality: "Auto" }, ...data }
+        : kind === "hdRedraw" || kind === "hdRedraw2"
+          ? { modelId: defaultGridImageModel, modelParams: { aspectRatio: "Auto", gridEnabled: "false", imageCount: "1", resolution: "2K", quality: "Auto" }, ...data }
         : kind === "rhinoTest"
           ? { modelId: defaultGridImageModel, modelParams: { aspectRatio: "Auto", gridEnabled: "false", imageCount: "1", resolution: "1K", quality: "Auto" }, ...data }
           : kind === "textImageLayout"
@@ -2322,6 +2421,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       .filter((node): node is Node<CanvasNodeData> => Boolean(node));
     let promptNodes = inputNodes.filter((node) => typeof node.data.prompt === "string" && node.data.prompt.trim());
     const isGenerateImageNode = source.data.kind === "generateImage";
+    const isHdRedrawNode = source.data.kind === "hdRedraw";
+    const isHdRedraw2Node = source.data.kind === "hdRedraw2";
     const isRhinoTestNode = source.data.kind === "rhinoTest";
     const isTextImageLayoutNode = source.data.kind === "textImageLayout";
     const isGridImageNode = source.data.kind === "gridImage";
@@ -2336,6 +2437,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     let rolePrompt = promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
     let prompt = isProductRemixNode
       ? ""
+      : isHdRedrawNode
+        ? ""
       : isTextImageLayoutNode
         ? buildTextImageLayoutPrompt(promptNodes)
         : isRhinoTestNode
@@ -2348,7 +2451,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             ? buildGridImagePrompt(promptNodes)
             : promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
 
-    if (!isProductRemixNode && (!prompt || (gridOutputEnabled && gridPromptCount < 1))) {
+    if (!isProductRemixNode && !isHdRedrawNode && (!prompt || (gridOutputEnabled && gridPromptCount < 1))) {
       set((state) => ({
         nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请先连接 Prompt 文本输入。", generationId: undefined, runState: "failed" as const } } : node))
       }));
@@ -2358,6 +2461,300 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       set((state) => ({
         nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "宫格图最多支持 10 个 Prompt。", generationId: undefined, runState: "failed" as const } } : node))
       }));
+      return;
+    }
+
+    if (isHdRedrawNode) {
+      const sourceImage = sortNodesVisually(
+        inputEdges
+          .filter((edge) => edge.targetHandle === "image-in")
+          .map((edge) => snapshot.nodes.find((node) => node.id === edge.source))
+          .filter((node): node is Node<CanvasNodeData> => Boolean(node?.data.kind === "image" && node.data.imageUrl))
+      )[0];
+      if (!sourceImage) {
+        set((state) => ({
+          nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请先用绿色端口连接 1 张需要高清重绘的 Image 图框。", generationId: undefined, runState: "failed" as const } } : node))
+        }));
+        return;
+      }
+
+      const modelId = typeof source.data.modelId === "string" ? source.data.modelId : defaultGridImageModel;
+      const params = { ...(source.data.modelParams ?? {}), gridEnabled: "false", imageCount: "1" };
+      const extraPrompt = promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
+      const controller = new AbortController();
+      const previousController = generationControllers.get(id);
+      previousController?.abort();
+      generationControllers.set(id, controller);
+      let mergeImageUrl = "";
+      let reversePrompt = "";
+      try {
+        const sourceImageUrls = await prepareGenerationReferenceImageUrls([sourceImage.data.imageUrl as string]);
+        const mergeImages = await requestGeneratedImages({
+          aiSettings: getClientAiSettingsPayload(),
+          images: sourceImageUrls,
+          mode: "submit",
+          model: modelId,
+          params,
+          prompt: extraPrompt ? `${hdRedrawMergePrompt}\n\n用户补充要求：${extraPrompt}` : hdRedrawMergePrompt,
+          sourceNodeId: id
+        }, controller);
+        mergeImageUrl = mergeImages[0]?.url ?? "";
+        if (!mergeImageUrl) throw new Error("高清重绘第一步没有返回 B 合图。");
+
+        const currentAfterMerge = get().nodes.find((node) => node.id === id);
+        if (currentAfterMerge?.data.generationId !== generationId || currentAfterMerge.data.runState !== "running") return;
+
+        reversePrompt = await requestHdRedrawReversePrompt(id, sourceImage, buildHdRedrawReversePromptInstruction(extraPrompt), controller);
+        addClientGeneratedImages([{ imageUrl: mergeImageUrl, modelId, prompt: hdRedrawMergePrompt, sourceNodeId: id }]);
+        generationControllers.delete(id);
+      } catch (error) {
+        generationControllers.delete(id);
+        set((state) => ({
+          nodes: state.nodes.map((node) => (
+            node.id === id && node.data.generationId === generationId
+              ? { ...node, data: { ...node.data, errorMessage: getGenerateImageErrorMessage(error), generationId: undefined, runState: error instanceof Error && error.name === "AbortError" ? "idle" as const : "failed" as const } }
+              : node
+          ))
+        }));
+        return;
+      }
+
+      set((state) => {
+        const cleaned = removeConnectedGeneratedOutputs(state, id);
+        const currentSource = cleaned.nodes.find((node) => node.id === id);
+        if (!currentSource || currentSource.data.generationId !== generationId || currentSource.data.runState !== "running") return state;
+        let currentZIndex = state.globalZIndex;
+        const reservedImageNumbers = new Set<number>();
+        const bImageNumber = getNextImageNumber(cleaned.nodes, reservedImageNumbers);
+        if (bImageNumber) reservedImageNumbers.add(bImageNumber);
+        if (!bImageNumber) {
+          return {
+            nodes: state.nodes.map((node) => (
+              node.id === id
+                ? { ...node, data: { ...node.data, errorMessage: "Image 图框已达到 100 个上限，请删除后再生成。", generationId: undefined, runState: "failed" as const } }
+                : node
+            ))
+          };
+        }
+        const generatedAt = Date.now();
+        const bPosition = findSingleOutputPosition(currentSource, cleaned.nodes, { height: imageNodeHeight, width: outputNodeWidth });
+        currentZIndex = nextZIndex(currentZIndex);
+        const bNode = makeNode(
+          `image-hd-redraw-b-${generatedAt}-${Math.round(Math.random() * 1000)}`,
+          "image",
+          bPosition,
+          currentZIndex,
+          {
+            generatedBy: id,
+            imageNumber: bImageNumber,
+            imageUrl: mergeImageUrl,
+            prompt: hdRedrawMergePrompt,
+            runState: "completed",
+            title: "高清重绘 B 合图"
+          }
+        );
+        const step2Prompt = buildHdRedrawStep2Prompt(sourceImage, bNode, reversePrompt, extraPrompt);
+        currentZIndex = nextZIndex(currentZIndex);
+        const promptNode = makeNode(
+          `prompt-hd-redraw-a-${generatedAt}-${Math.round(Math.random() * 1000)}`,
+          "prompt",
+          { x: bPosition.x, y: bPosition.y + imageNodeHeight + outputNodeGap },
+          currentZIndex,
+          {
+            generatedBy: id,
+            prompt: step2Prompt,
+            promptRichHtml: buildVisibleTextPromptRichHtml(step2Prompt),
+            runState: "completed",
+            title: "A 图 Prompt"
+          }
+        );
+        currentZIndex = nextZIndex(currentZIndex);
+        const step2Node = makeNode(
+          `hdRedraw2-${generatedAt}-${Math.round(Math.random() * 1000)}`,
+          "hdRedraw2",
+          { x: bPosition.x + outputNodeWidth + outputNodeColumnGap, y: bPosition.y },
+          currentZIndex,
+          {
+            generatedBy: id,
+            modelId,
+            modelParams: params,
+            runState: "idle",
+            title: "高清重绘2"
+          }
+        );
+        return {
+          globalZIndex: currentZIndex,
+          activeEdgeId: null,
+          historyPast: pushHistory(state),
+          historyFuture: [],
+          nodes: [
+            ...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, prompt: "高清重绘1：已生成 B 图和 A 图 Prompt", runState: "completed" as const } } : node),
+            bNode,
+            promptNode,
+            step2Node
+          ],
+          edges: [
+            ...cleaned.edges,
+            {
+              id: `edge-hd-redraw-b-${generatedAt}`,
+              source: id,
+              target: bNode.id,
+              sourceHandle: "image-out",
+              targetHandle: "image-in",
+              type: "deletable",
+              selected: false,
+              data: { generatedBy: id, portType: "image" }
+            },
+            {
+              id: `edge-hd-redraw-a-to-step2-${generatedAt}`,
+              source: sourceImage.id,
+              target: step2Node.id,
+              sourceHandle: "image-out",
+              targetHandle: "image-in",
+              type: "deletable",
+              selected: false,
+              data: { generatedBy: id, portType: "image" }
+            },
+            {
+              id: `edge-hd-redraw-b-to-step2-${generatedAt}`,
+              source: bNode.id,
+              target: step2Node.id,
+              sourceHandle: "image-out",
+              targetHandle: "image-in",
+              type: "deletable",
+              selected: false,
+              data: { generatedBy: id, portType: "image" }
+            },
+            {
+              id: `edge-hd-redraw-prompt-${generatedAt}`,
+              source: id,
+              target: promptNode.id,
+              sourceHandle: "text-out",
+              targetHandle: "text-in",
+              type: "deletable",
+              selected: false,
+              data: { generatedBy: id, portType: "text" }
+            },
+            {
+              id: `edge-hd-redraw-prompt-to-step2-${generatedAt}`,
+              source: promptNode.id,
+              target: step2Node.id,
+              sourceHandle: "text-out",
+              targetHandle: "text-in",
+              type: "deletable",
+              selected: false,
+              data: { generatedBy: id, portType: "text" }
+            }
+          ]
+        };
+      });
+      return;
+    }
+
+    if (isHdRedraw2Node) {
+      const referenceImages = sortNodesVisually(
+        inputEdges
+          .filter((edge) => edge.targetHandle === "image-in")
+          .map((edge) => snapshot.nodes.find((node) => node.id === edge.source))
+          .filter((node): node is Node<CanvasNodeData> => Boolean(node?.data.kind === "image" && node.data.imageUrl))
+      ).slice(0, 2);
+      const step2Prompt = promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
+      if (referenceImages.length < 2 || !step2Prompt) {
+        set((state) => ({
+          nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "高清重绘2 需要连接 A 图、B 图和 A 图 Prompt。", generationId: undefined, runState: "failed" as const } } : node))
+        }));
+        return;
+      }
+
+      const modelId = typeof source.data.modelId === "string" ? source.data.modelId : defaultGridImageModel;
+      const params = { ...(source.data.modelParams ?? {}), gridEnabled: "false", imageCount: "1" };
+      const controller = new AbortController();
+      generationControllers.get(id)?.abort();
+      generationControllers.set(id, controller);
+      let finalImageUrl = "";
+      const finalPrompt = step2Prompt;
+      try {
+        const finalReferenceImages = await prepareGenerationReferenceImageUrls(referenceImages.map((node) => node.data.imageUrl as string));
+        const finalImages = await requestGeneratedImages({
+          aiSettings: getClientAiSettingsPayload(),
+          images: finalReferenceImages,
+          mode: "submit",
+          model: modelId,
+          params,
+          prompt: finalPrompt,
+          sourceNodeId: id
+        }, controller);
+        finalImageUrl = finalImages[0]?.url ?? "";
+        if (!finalImageUrl) throw new Error("高清重绘第二步没有返回 C 高清图。");
+        addClientGeneratedImages([{ imageUrl: finalImageUrl, modelId, prompt: finalPrompt, sourceNodeId: id }]);
+        generationControllers.delete(id);
+      } catch (error) {
+        generationControllers.delete(id);
+        set((state) => ({
+          nodes: state.nodes.map((node) => (
+            node.id === id && node.data.generationId === generationId
+              ? { ...node, data: { ...node.data, errorMessage: getGenerateImageErrorMessage(error), generationId: undefined, runState: error instanceof Error && error.name === "AbortError" ? "idle" as const : "failed" as const } }
+              : node
+          ))
+        }));
+        return;
+      }
+
+      set((state) => {
+        const cleaned = removeConnectedGeneratedOutputs(state, id);
+        const currentSource = cleaned.nodes.find((node) => node.id === id);
+        if (!currentSource || currentSource.data.generationId !== generationId || currentSource.data.runState !== "running") return state;
+        const imageNumber = getNextImageNumber(cleaned.nodes);
+        if (!imageNumber) {
+          return {
+            nodes: state.nodes.map((node) => (
+              node.id === id
+                ? { ...node, data: { ...node.data, errorMessage: "Image 图框已达到 100 个上限，请删除后再生成。", generationId: undefined, runState: "failed" as const } }
+                : node
+            ))
+          };
+        }
+        let currentZIndex = state.globalZIndex;
+        currentZIndex = nextZIndex(currentZIndex);
+        const generatedAt = Date.now();
+        const outputNode = makeNode(
+          `image-hd-redraw-c-${generatedAt}-${Math.round(Math.random() * 1000)}`,
+          "image",
+          findSingleOutputPosition(currentSource, cleaned.nodes, { height: imageNodeHeight, width: outputNodeWidth }),
+          currentZIndex,
+          {
+            generatedBy: id,
+            imageNumber,
+            imageUrl: finalImageUrl,
+            prompt: finalPrompt,
+            runState: "completed",
+            title: "高清重绘 C 高清图"
+          }
+        );
+        return {
+          globalZIndex: currentZIndex,
+          activeEdgeId: null,
+          historyPast: pushHistory(state),
+          historyFuture: [],
+          nodes: [
+            ...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, prompt: "高清重绘2：已生成 C 高清图", runState: "completed" as const } } : node),
+            outputNode
+          ],
+          edges: [
+            ...cleaned.edges,
+            {
+              id: `edge-hd-redraw-c-${generatedAt}`,
+              source: id,
+              target: outputNode.id,
+              sourceHandle: "image-out",
+              targetHandle: "image-in",
+              type: "deletable",
+              selected: false,
+              data: { generatedBy: id, portType: "image" }
+            }
+          ]
+        };
+      });
       return;
     }
 
@@ -3616,9 +4013,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => {
       const selectedNodes = state.nodes.filter((node) => node.selected && node.data.kind !== "group");
       if (selectedNodes.length < 2) return state;
-      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
+      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
 
-      const useWorkflowLayout = selectedNodes.some((node) => node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix");
+      const useWorkflowLayout = selectedNodes.some((node) => node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix");
       const positions = useWorkflowLayout
         ? layoutColumns(selectedNodes, getWorkflowColumns(selectedNodes, state.edges))
         : layoutGrid(selectedNodes);
