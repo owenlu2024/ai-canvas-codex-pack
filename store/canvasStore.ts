@@ -454,6 +454,15 @@ function getNextImageNumber(nodes: Node<CanvasNodeData>[], reserved = new Set<nu
   return undefined;
 }
 
+function replaceImageMentionNumbers(text: string, imageNumberMap: Map<number, number>) {
+  if (!imageNumberMap.size) return text;
+  return text.replace(/(@(?:image\s*)?|<\s*image\s*)(\d{1,3})(\s*>)?/gi, (match, prefix: string, rawNumber: string, suffix = "") => {
+    const nextNumber = imageNumberMap.get(Number(rawNumber));
+    if (!nextNumber) return match;
+    return `${prefix}${String(nextNumber).padStart(rawNumber.length, "0")}${suffix}`;
+  });
+}
+
 function makeCopiedNodes(
   sourceNodes: Node<CanvasNodeData>[],
   baseNodes: Node<CanvasNodeData>[],
@@ -463,6 +472,7 @@ function makeCopiedNodes(
   let zIndex = startZIndex;
   const reservedImageNumbers = new Set<number>();
   const idMap = new Map<string, string>();
+  const imageNumberMap = new Map<number, number>();
   const copiedNodes: Node<CanvasNodeData>[] = [];
   const selectedSourceIds = new Set(sourceNodes.map((node) => node.id));
 
@@ -481,10 +491,12 @@ function makeCopiedNodes(
     };
 
     if (node.data.kind === "image") {
+      const previousImageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined;
       const imageNumber = getNextImageNumber([...baseNodes, ...copiedNodes], reservedImageNumbers);
       if (imageNumber) {
         reservedImageNumbers.add(imageNumber);
         nextData.imageNumber = imageNumber;
+        if (previousImageNumber) imageNumberMap.set(previousImageNumber, imageNumber);
       } else {
         delete nextData.imageNumber;
       }
@@ -501,6 +513,15 @@ function makeCopiedNodes(
       zIndex,
       data: nextData
     });
+  });
+
+  copiedNodes.forEach((node) => {
+    if (typeof node.data.prompt !== "string") return;
+    node.data = {
+      ...node.data,
+      prompt: replaceImageMentionNumbers(node.data.prompt, imageNumberMap)
+    };
+    if (typeof node.data.promptRichHtml === "string") delete node.data.promptRichHtml;
   });
 
   return {
@@ -698,6 +719,24 @@ function getPromptMentionedImageNodes(nodes: Node<CanvasNodeData>[], promptNodes
     });
   });
   return mentionedNodes;
+}
+
+function getMissingMentionImageNumbers(nodes: Node<CanvasNodeData>[], promptNodes: Node<CanvasNodeData>[]) {
+  const existingNumbers = new Set<number>();
+  nodes.forEach((node) => {
+    if (node.data.kind === "image" && typeof node.data.imageNumber === "number") existingNumbers.add(node.data.imageNumber);
+  });
+  const missingNumbers: number[] = [];
+  const seenMissing = new Set<number>();
+  promptNodes.forEach((node) => {
+    const prompt = typeof node.data.prompt === "string" ? node.data.prompt : "";
+    parseImageMentionNumbers(prompt).forEach((imageNumber) => {
+      if (existingNumbers.has(imageNumber) || seenMissing.has(imageNumber)) return;
+      seenMissing.add(imageNumber);
+      missingNumbers.push(imageNumber);
+    });
+  });
+  return missingNumbers;
 }
 
 function getTargetInputNodes(nodes: Node<CanvasNodeData>[], edges: Edge[], targetId: string) {
@@ -2461,6 +2500,25 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (gridOutputEnabled && gridPromptCount > 10) {
       set((state) => ({
         nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "宫格图最多支持 10 个 Prompt。", generationId: undefined, runState: "failed" as const } } : node))
+      }));
+      return;
+    }
+    const missingMentionNumbers = isProductRemixNode ? [] : getMissingMentionImageNumbers(snapshot.nodes, promptNodes);
+    if (missingMentionNumbers.length) {
+      set((state) => ({
+        nodes: state.nodes.map((node) => (
+          node.id === id && node.data.generationId === generationId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  errorMessage: `Prompt 里引用了不存在的 ${missingMentionNumbers.map((number) => `@Image ${String(number).padStart(3, "0")}`).join("、")}，请改成当前图片编号或用绿色线重新连接。`,
+                  generationId: undefined,
+                  runState: "failed" as const
+                }
+              }
+            : node
+        ))
       }));
       return;
     }

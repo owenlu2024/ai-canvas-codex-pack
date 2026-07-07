@@ -305,10 +305,20 @@ function getNextCopyImageNumber(nodes: Node<CanvasNodeData>[], reserved = new Se
   return undefined;
 }
 
+function replaceImageMentionNumbers(text: string, imageNumberMap: Map<number, number>) {
+  if (!imageNumberMap.size) return text;
+  return text.replace(/(@(?:image\s*)?|<\s*image\s*)(\d{1,3})(\s*>)?/gi, (match, prefix: string, rawNumber: string, suffix = "") => {
+    const nextNumber = imageNumberMap.get(Number(rawNumber));
+    if (!nextNumber) return match;
+    return `${prefix}${String(nextNumber).padStart(rawNumber.length, "0")}${suffix}`;
+  });
+}
+
 function makeDragCopiedNodes(sourceNodes: Node<CanvasNodeData>[], allNodes: Node<CanvasNodeData>[], startZIndex: number) {
   let zIndex = startZIndex;
   const idMap: Record<string, string> = {};
   const reservedImageNumbers = new Set<number>();
+  const imageNumberMap = new Map<number, number>();
   const selectedSourceIds = new Set(sourceNodes.map((node) => node.id));
   const copiedNodes: Node<CanvasNodeData>[] = [];
 
@@ -325,10 +335,12 @@ function makeDragCopiedNodes(sourceNodes: Node<CanvasNodeData>[], allNodes: Node
       zIndex
     };
     if (node.data.kind === "image") {
+      const previousImageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined;
       const imageNumber = getNextCopyImageNumber([...allNodes, ...copiedNodes], reservedImageNumbers);
       if (imageNumber) {
         reservedImageNumbers.add(imageNumber);
         data.imageNumber = imageNumber;
+        if (previousImageNumber) imageNumberMap.set(previousImageNumber, imageNumber);
       } else {
         delete data.imageNumber;
       }
@@ -341,6 +353,15 @@ function makeDragCopiedNodes(sourceNodes: Node<CanvasNodeData>[], allNodes: Node
       zIndex,
       data
     });
+  });
+
+  copiedNodes.forEach((node) => {
+    if (typeof node.data.prompt !== "string") return;
+    node.data = {
+      ...node.data,
+      prompt: replaceImageMentionNumbers(node.data.prompt, imageNumberMap)
+    };
+    if (typeof node.data.promptRichHtml === "string") delete node.data.promptRichHtml;
   });
 
   return {
