@@ -17,6 +17,7 @@ import {
   defaultIndustrialDesignImageModelId,
   defaultProductRemixModelId,
   defaultSceneImageModelId,
+  type GenerateImageModelSpec,
   generateImageModelSpecs,
   getDefaultGenerateImageParams,
   getDefaultGridImageParams,
@@ -93,7 +94,7 @@ function useConfiguredTextModels(fallbackOptions: string[]) {
 function usePromptPlannerModel(data: CanvasNodeData) {
   const modelOptions = useConfiguredTextModels(promptPlannerModelOptions);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId) ? data.modelId : modelOptions[0] ?? "gemini-2.5-flash";
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, "gemini-2.5-flash");
   return { modelDisplayName, modelId, modelOptions };
 }
 
@@ -101,6 +102,17 @@ function getModelDisplayName(model: string, options: string[]) {
   const baseModel = getBaseModelId(model) ?? model;
   const sameBaseCount = options.filter((option) => (getBaseModelId(option) ?? option) === baseModel).length;
   return sameBaseCount > 1 ? model : baseModel;
+}
+
+function resolveConfiguredModelId(savedModelId: unknown, modelOptions: string[], fallbackModelId: string, specs?: GenerateImageModelSpec[]) {
+  const fallback = modelOptions[0] ?? fallbackModelId;
+  if (typeof savedModelId !== "string" || !savedModelId.trim()) return fallback;
+  if (modelOptions.includes(savedModelId)) return savedModelId;
+
+  const savedBaseModel = getBaseModelId(savedModelId) ?? savedModelId;
+  if (specs && !specs.some((model) => model.id === savedBaseModel)) return fallback;
+
+  return modelOptions.find((option) => (getBaseModelId(option) ?? option) === savedBaseModel) ?? fallback;
 }
 
 export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>) {
@@ -984,7 +996,7 @@ function VisualDirectorPanel({ id, data }: { id: string; data: CanvasNodeData })
   const locked = data.runState === "running";
   const modelOptions = useConfiguredImageModels(generateImageModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const modelId = typeof data.modelId === "string" && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId)) ? data.modelId : modelOptions[0] ?? defaultGenerateImageModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultGenerateImageModelId, generateImageModelSpecs);
   const params = data.modelParams ?? {};
   const outputLanguage = params.outputLanguage === "English" ? "English" : params.outputLanguage === "中英双语" ? "中英双语" : "中文";
   const aspectRatio = ["9:16", "16:9", "4:5", "1:1"].includes(params.aspectRatio ?? "") ? params.aspectRatio as string : "9:16";
@@ -1062,8 +1074,7 @@ function GenerateImagePanel({ id, data, showGridOption = true }: { id: string; d
   );
   const modelOptions = useConfiguredImageModels(generateImageModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
-  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultGenerateImageModelId, generateImageModelSpecs);
   const spec = getGenerateImageModelSpec(modelId);
   const params = { ...getDefaultGenerateImageParams(modelId), ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
@@ -1210,8 +1221,7 @@ function HdRedrawPanel({ id, data, step }: { id: string; data: CanvasNodeData; s
   );
   const modelOptions = useConfiguredImageModels(generateImageModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
-  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultGenerateImageModelId, generateImageModelSpecs);
   const spec = getGenerateImageModelSpec(modelId);
   const params: Record<string, string> = { ...getDefaultGenerateImageParams(modelId), imageCount: "1", ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
@@ -1335,8 +1345,7 @@ function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const modelOptions = useConfiguredImageModels(generateImageModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
-  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultGenerateImageModelId, generateImageModelSpecs);
   const spec = getGenerateImageModelSpec(modelId);
   const params = { aspectRatio: "Auto", imageCount: "1", resolution: "Auto", ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
@@ -1429,8 +1438,7 @@ function GridImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
   );
   const modelOptions = useConfiguredImageModels(gridImageModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && gridImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
-  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGridImageModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultGridImageModelId, gridImageModelSpecs);
   const spec = getGridImageModelSpec(modelId);
   const params = { ...getDefaultGridImageParams(modelId), ...(data.modelParams ?? {}) };
   const visibleParams = spec.params;
@@ -1497,8 +1505,7 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
   );
   const modelOptions = useConfiguredImageModels(sceneImageModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && sceneImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
-  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultSceneImageModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultSceneImageModelId, sceneImageModelSpecs);
   const spec = getSceneImageModelSpec(modelId);
   const params = { ...getDefaultSceneImageParams(modelId), ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
@@ -1611,8 +1618,7 @@ function IndustrialDesignImagePanel({ id, data }: { id: string; data: CanvasNode
   );
   const modelOptions = useConfiguredImageModels(industrialDesignImageModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && industrialDesignImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
-  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultIndustrialDesignImageModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultIndustrialDesignImageModelId, industrialDesignImageModelSpecs);
   const spec = getIndustrialDesignImageModelSpec(modelId);
   const params = { ...getDefaultIndustrialDesignImageParams(modelId), ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
@@ -1760,8 +1766,7 @@ function ProductRemixPanel({ id, data }: { id: string; data: CanvasNodeData }) {
   );
   const modelOptions = useConfiguredImageModels(productRemixModelIds);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && productRemixModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
-  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultProductRemixModelId;
+  const modelId = resolveConfiguredModelId(data.modelId, modelOptions, defaultProductRemixModelId, productRemixModelSpecs);
   const spec = getProductRemixModelSpec(modelId);
   const params = { ...getDefaultProductRemixParams(modelId), ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
@@ -2102,9 +2107,13 @@ function NodeModelSelect({ id, kind, value }: { id: string; kind: "image" | "tex
   }, [kind]);
 
   useEffect(() => {
-    if (!models.length || (value && models.includes(value))) return;
-    updateNodeData(id, { modelId: models[0] });
+    if (!models.length) return;
+    const nextModelId = resolveConfiguredModelId(value, models, models[0] ?? "");
+    if (value === nextModelId) return;
+    updateNodeData(id, { modelId: nextModelId });
   }, [id, models, updateNodeData, value]);
+
+  const selectedModel = models.length ? resolveConfiguredModelId(value, models, models[0] ?? "") : "";
 
   return (
     <div className="nodrag nopan nowheel relative">
@@ -2115,7 +2124,7 @@ function NodeModelSelect({ id, kind, value }: { id: string; kind: "image" | "tex
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
-        value={value && models.includes(value) ? value : models[0] ?? ""}
+        value={selectedModel}
       >
         <option value="">{models.length ? "选择模型" : "连接后读取模型"}</option>
         {models.map((model) => (
