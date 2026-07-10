@@ -1338,7 +1338,16 @@ function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
   const spec = getGenerateImageModelSpec(modelId);
-  const params = { aspectRatio: "Auto", imageCount: "1", resolution: "Auto", ...(data.modelParams ?? {}) };
+  const modelResolutionOptions = spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"];
+  const onlySupports1K = modelResolutionOptions.length === 1 && modelResolutionOptions[0] === "1K";
+  const storedResolution = data.modelParams?.resolution;
+  const resolution = onlySupports1K ? "1K" : storedResolution ?? "Auto";
+  const params = useMemo(() => ({
+    aspectRatio: "Auto",
+    imageCount: "1",
+    ...(data.modelParams ?? {}),
+    resolution
+  }), [data.modelParams, resolution]);
   const locked = data.runState === "running";
   const aspectRatioOptions = [
     "Auto",
@@ -1355,12 +1364,12 @@ function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }
     "4:1 Superwide",
     "1:4 Supertall"
   ];
-  const resolutionOptions = ["Auto", ...(spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"])];
+  const resolutionOptions = onlySupports1K ? ["1K"] : ["Auto", ...modelResolutionOptions];
 
   useEffect(() => {
-    if (data.modelId && data.modelId === modelId && data.modelParams) return;
+    if (data.modelId && data.modelId === modelId && data.modelParams && data.modelParams.resolution === resolution) return;
     updateNodeData(id, { modelId, modelParams: params });
-  }, [data.modelId, data.modelParams, id, modelId, updateNodeData]);
+  }, [data.modelId, data.modelParams, id, modelId, params, resolution, updateNodeData]);
 
   const updateModel = (nextModelId: string) => {
     if (locked) return;
@@ -1369,7 +1378,7 @@ function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }
       modelParams: {
         aspectRatio: params.aspectRatio ?? "Auto",
         imageCount: params.imageCount ?? "1",
-        resolution: "Auto"
+        resolution: getGenerateImageModelSpec(nextModelId).params.find((param) => param.key === "resolution")?.options.length === 1 ? "1K" : "Auto"
       }
     });
   };
@@ -1406,7 +1415,7 @@ function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }
         label="分辨率"
         onChange={(value) => updateParam("resolution", value)}
         options={resolutionOptions}
-        value={params.resolution ?? "Auto"}
+        value={resolution}
       />
       <GenerateSelect
         compact

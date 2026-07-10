@@ -1,6 +1,6 @@
 import { getBaseModelId } from "@/lib/clientAiSettings";
 
-export type GenerateImageModelId = "gpt-image-2" | "gemini-3.1-flash-image-preview" | "gemini-3-pro-image-preview" | "agnes-image-2.1-flash";
+export type GenerateImageModelId = "gpt-image-2" | "gemini-3.1-flash-image-preview" | "gemini-3.1-flash-lite-image" | "gemini-3-pro-image-preview" | "agnes-image-2.1-flash";
 
 export type GenerateImageParamKey = "aspectRatio" | "resolution" | "quality" | "imageCount" | "size";
 
@@ -52,6 +52,12 @@ const geminiResolutionParam: GenerateImageParamSpec = {
   options: ["1K", "2K", "4K"]
 };
 
+const geminiFlashLiteResolutionParam: GenerateImageParamSpec = {
+  key: "resolution",
+  label: "Res",
+  options: ["1K"]
+};
+
 const imageCountParam: GenerateImageParamSpec = {
   key: "imageCount",
   label: "Image Count",
@@ -70,6 +76,16 @@ const agnesImageModelSpec: GenerateImageModelSpec = {
   label: "agnes-image-2.1-flash",
   params: [
     agnesSizeParam,
+    imageCountParam
+  ]
+};
+
+const geminiFlashLiteImageModelSpec: GenerateImageModelSpec = {
+  id: "gemini-3.1-flash-lite-image",
+  label: "gemini-3.1-flash-lite-image",
+  params: [
+    aspectRatioParam,
+    geminiFlashLiteResolutionParam,
     imageCountParam
   ]
 };
@@ -94,6 +110,7 @@ export const generateImageModelSpecs: GenerateImageModelSpec[] = [
       imageCountParam
     ]
   },
+  geminiFlashLiteImageModelSpec,
   {
     id: "gemini-3-pro-image-preview",
     label: "gemini-3-pro-image-preview",
@@ -127,6 +144,10 @@ export const gridImageModelSpecs: GenerateImageModelSpec[] = [
     ]
   },
   {
+    ...geminiFlashLiteImageModelSpec,
+    params: [aspectRatioParam, geminiFlashLiteResolutionParam]
+  },
+  {
     ...agnesImageModelSpec,
     params: [agnesSizeParam]
   }
@@ -153,6 +174,7 @@ export const sceneImageModelSpecs: GenerateImageModelSpec[] = [
       imageCountParam
     ]
   },
+  geminiFlashLiteImageModelSpec,
   {
     id: "gemini-3-pro-image-preview",
     label: "gemini-3-pro-image-preview",
@@ -179,6 +201,7 @@ export function getReferenceImageLimit(modelId?: string) {
   modelId = getBaseModelId(modelId);
   if (modelId === "gpt-image-2") return 5;
   if (modelId === "gemini-3.1-flash-image-preview") return 14;
+  if (modelId === "gemini-3.1-flash-lite-image") return 14;
   if (modelId === "gemini-3-pro-image-preview") return 14;
   if (modelId === "agnes-image-2.1-flash") return 5;
   return 5;
@@ -266,7 +289,9 @@ export function getDefaultProductRemixParams(modelId?: string): Record<string, s
     gridMode: "1",
     imageCount: "1",
     remix: "50",
-    ...(specDefaults.resolution ? { resolution: "2K" } : {}),
+    ...(specDefaults.resolution ? {
+      resolution: spec.params.find((param) => param.key === "resolution")?.options.includes("2K") ? "2K" : specDefaults.resolution
+    } : {}),
     startRemix: "0"
   };
 }
