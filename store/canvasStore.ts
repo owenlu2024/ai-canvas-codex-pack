@@ -1576,12 +1576,30 @@ function getProductRemixGridLayout(count: number) {
   return "one image containing a clean 3 by 3 grid";
 }
 
+function getProductRemixInfluenceDescription(value: number) {
+  if (value <= 0) return "follow the main product almost completely";
+  if (value < 25) return "keep the main product overwhelmingly dominant with only subtle reference-product influence";
+  if (value < 40) return "keep the main product strongly dominant while introducing a restrained amount of reference-product design language";
+  if (value < 50) return "keep the main product moderately dominant while visibly borrowing selected reference-product traits";
+  if (value === 50) return "balance the main product and reference product evenly";
+  if (value <= 60) return "make the reference product moderately dominant while retaining clear main-product identity";
+  if (value <= 75) return "make the reference product strongly dominant while preserving essential main-product identity cues";
+  if (value < 100) return "follow the reference product overwhelmingly while retaining only subtle main-product identity cues";
+  return "follow the reference product direction almost completely";
+}
+
 function buildProductRemixPrompt(referenceImages: Node<CanvasNodeData>[], rolePrompt: string, params: Record<string, unknown>) {
   const remixValues = getProductRemixValues(params);
   const labels = (nodes: Node<CanvasNodeData>[]) => nodes
     .map((node, index) => `<Image${String(typeof node.data.imageNumber === "number" ? node.data.imageNumber : index + 1).padStart(3, "0")}>`)
     .join(", ");
-  const panelRows = remixValues.map((value, index) => `- Internal instruction for panel ${index + 1}: use ${value} percent reference-product influence. ${value === 0 ? "Keep the main product almost unchanged." : value === 100 ? "Fully follow the reference product direction." : value < 50 ? "Main product remains dominant; borrow only the appropriate amount of design language from the reference product." : value === 50 ? "Balance the main product and reference product equally." : "Reference product direction is dominant while retaining only necessary main-product identity cues."}`);
+  const remixDirection = remixValues.length === 1
+    ? `Internal fusion direction: ${getProductRemixInfluenceDescription(remixValues[0])}.`
+    : [
+        `Internal fusion progression: the first panel should ${getProductRemixInfluenceDescription(remixValues[0])}.`,
+        "Move through the panels in normal visual reading order. Each successive panel must shift one even visual step away from the main product and toward the reference product, creating a smooth and clearly perceptible progression.",
+        `The final panel should ${getProductRemixInfluenceDescription(remixValues[remixValues.length - 1])}.`
+      ].join(" ");
 
   return [
     "TASK: Product Remix Synthesizer.",
@@ -1595,9 +1613,8 @@ function buildProductRemixPrompt(referenceImages: Node<CanvasNodeData>[], rolePr
     "",
     `Output layout: ${getProductRemixGridLayout(remixValues.length)}.`,
     "Each panel must show a complete, polished product design render. Keep all panels visually comparable, with consistent camera, lighting, scale, background simplicity, and product presentation.",
-    "Remix scale rule: 0 means fully main product; 100 means fully reference product. All listed values are mandatory.",
-    ...panelRows,
-    "The panel numbers and influence values above are hidden generation controls only. Never render them as visible content. Do not place the word Remix, blend strength, percentages, fractions such as 20/100, panel numbers, captions, headers, legends, or any other control metadata anywhere in the image, especially in the top-left corner of any panel.",
+    remixDirection,
+    "The fusion progression above is a hidden generation control only. Never render it as visible content. Do not place the word Remix, blend strength, percentages, fractions, digits, panel numbers, captions, headers, legends, or any other control metadata anywhere in the image, especially in the top-left corner of any panel.",
     "Every panel must begin directly with the product artwork and its clean background, without a title strip, label area, annotation margin, or text overlay.",
     "",
     "Quality requirements: professional product concept render, clean background, clear product body, realistic structure, coherent industrial design, suitable for e-commerce or product-design exploration."
