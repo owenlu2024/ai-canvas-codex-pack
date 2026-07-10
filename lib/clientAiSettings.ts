@@ -11,6 +11,7 @@ export interface ClientStoredApiSettings {
   savedAt?: string;
   settings?: ClientApiSettings;
   textModels?: string[];
+  videoModels?: string[];
   version?: 1;
 }
 
@@ -72,13 +73,16 @@ export function normalizeClientStoredSettings(value: Partial<ClientStoredApiSett
   const apiConfigs = buildApiConfigs(value);
   const settings = apiConfigs[0] ?? normalizeApiConfig(value.settings, 0);
   const agnesSettings = apiConfigs[1] ?? normalizeApiConfig(value.agnesSettings, 1);
+  const storedTextModels = Array.isArray(value.textModels) ? value.textModels.filter((model): model is string => typeof model === "string") : [];
+  const storedVideoModels = Array.isArray(value.videoModels) ? value.videoModels.filter((model): model is string => typeof model === "string") : [];
   return {
     agnesSettings,
     apiConfigs,
     imageModels: Array.isArray(value.imageModels) ? value.imageModels.filter((model): model is string => typeof model === "string") : [],
     savedAt: typeof value.savedAt === "string" ? value.savedAt : new Date().toISOString(),
     settings,
-    textModels: Array.isArray(value.textModels) ? value.textModels.filter((model): model is string => typeof model === "string") : [],
+    textModels: storedTextModels.filter((model) => !isVideoModel(model)),
+    videoModels: Array.from(new Set([...storedVideoModels, ...storedTextModels.filter(isVideoModel)])).sort(),
     version: 1
   };
 }
@@ -109,3 +113,4 @@ export function getClientAiSettingsPayload() {
     return undefined;
   }
 }
+import { isVideoModel } from "@/lib/modelClassification";

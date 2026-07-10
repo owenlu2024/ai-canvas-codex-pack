@@ -32,6 +32,7 @@ const defaultAiPromptModel = "gemini-2.5-flash";
 const defaultSceneDirectorModel = "gemini-2.5-flash";
 const defaultTaobaoPageDirectorModel = "gemini-2.5-flash";
 const defaultIndustrialDesignerModel = "gemini-2.5-flash";
+const defaultProductPosterModel = "gemini-2.5-flash";
 const defaultVisualDirectorModel = "gpt-image-2";
 const defaultGridImageModel = "gpt-image-2";
 
@@ -53,7 +54,7 @@ function makeNode(id: string, kind: NodeKind, position: XYPosition, zIndex: numb
 }
 
 function isRunningLockingNode(node: Node<CanvasNodeData>) {
-  return (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director") && node.data.runState === "running";
+  return (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function edgeTouchesRunningLockingNode(edge: Pick<Edge, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
@@ -95,7 +96,7 @@ function is12AiDirectBaseUrl(value?: string) {
 }
 
 function isDirectGeminiImageModel(model?: unknown) {
-  return model === "gemini-3.1-flash-image-preview" || model === "gemini-3.1-flash-lite-image" || model === "gemini-3-pro-image-preview";
+  return model === "gemini-3.1-flash-image" || model === "gemini-3.1-flash-image-preview" || model === "gemini-3.1-flash-lite-image" || model === "gemini-3-pro-image" || model === "gemini-3-pro-image-preview";
 }
 
 function isDirectGptImageModel(model?: unknown) {
@@ -541,8 +542,8 @@ function makeCopiedNodes(
 function getNodeSize(node: Node<CanvasNodeData>) {
   const isIndustrialAiPrompt = node.data.kind === "imageChat" && node.data.modelParams?.module === "Industrial Design";
   return {
-    height: Number(node.data.height ?? (node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" ? 430 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
-    width: Number(node.data.width ?? (node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
+    height: Number(node.data.height ?? (node.data.kind === "product_poster" ? 720 : node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" ? 430 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
+    width: Number(node.data.width ?? (node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
   };
 }
 
@@ -1762,12 +1763,17 @@ function hasStrictProductLock(prompt: string) {
 function buildTextImageLayoutReferenceManifest(referenceImages: Node<CanvasNodeData>[], prompt: string, styleReferenceImages: Node<CanvasNodeData>[] = [], styleSummary = "") {
   if (!referenceImages.length && !styleReferenceImages.length && !styleSummary) return "";
   const strictProductLock = hasStrictProductLock(prompt);
+  const hasMainProduct = referenceImages.some((node, index) => {
+    const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : index + 1;
+    return getImageRoleFromPrompt(prompt, imageNumber) === "main";
+  });
+  const productLockActive = strictProductLock || hasMainProduct;
   const rows = referenceImages.map((node, index) => {
     const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : index + 1;
     const label = `<Image${String(imageNumber).padStart(3, "0")}>`;
     const role = getImageRoleFromPrompt(prompt, imageNumber);
     const roleText = role === "main" || strictProductLock && role !== "scene"
-      ? "PRIMARY PRODUCT IDENTITY SOURCE. This is the only allowed product. The final image must preserve this product's visible identity: category, silhouette, geometry, proportions, color/material separation, transparent/base parts, nozzle/cap/openings, connector details, and key structural features. Do not replace it with a similar generic product, different bottle, cable, wire, appliance, container, or any invented object."
+      ? "PRIMARY PRODUCT IDENTITY SOURCE - PIXEL-FAITHFUL PRODUCT LOCK. This is the only allowed product. Preserve its exact visible category, silhouette, outer contour, geometry, dimensions and proportions, camera viewpoint, perspective, visible face ratio, color/material separation, transparent/base parts, nozzle/cap/openings, buttons, seams, connector details, markings, and every distinctive structural feature. Do not redesign, restyle, simplify, beautify into another form, change the viewpoint, invent parts, remove parts, or replace it with a similar generic product or any other object."
         : role === "size"
           ? "PRODUCT SIZE / STRUCTURE REFERENCE. Preserve visible product proportions, structure, and scale cues; do not use only as loose measurement inspiration."
           : role === "scene"
@@ -1780,11 +1786,14 @@ function buildTextImageLayoutReferenceManifest(referenceImages: Node<CanvasNodeD
   return [
     "TEXT IMAGE LAYOUT REFERENCE MAP - mandatory:",
     ...rows,
-    strictProductLock && referenceImages.length
-      ? "STRICT PRODUCT LOCK: all non-style attached images are product/content evidence. Generate the exact same product identity, not a redesigned, simplified, abstracted, stylized, or category-similar item. If a product image is a dimension, specification, side-view, or white-background reference, it still defines the product appearance and structure."
+    productLockActive && referenceImages.length
+      ? "STRICT PRODUCT LOCK IS AUTOMATICALLY ACTIVE: the declared Main Product image is the immutable source of truth. Reproduce the same physical product, not a redesigned, simplified, abstracted, stylized, improved, beautified, or category-similar item. Product fidelity has higher priority than composition, style, lighting, typography, scene, and marketing aesthetics."
       : "",
-    strictProductLock && referenceImages.length
-      ? "Allowed changes under Product Lock: placement, lighting, perspective, scene integration, and commercial retouching only. Forbidden changes: changing product type, changing main geometry, inventing different attachments, removing transparent/base parts, changing color/material layout, adding unrelated objects as the product, or swapping to another object."
+    productLockActive && referenceImages.length
+      ? "Allowed changes: background, surrounding layout, typography placement, shadows, and conservative scene integration only. Forbidden changes: camera angle/viewpoint of the product, silhouette, proportions, geometry, product type, attachments, transparent/base parts, openings, buttons, seams, color/material layout, markings, or any recognizable detail. If the requested layout conflicts with product fidelity, change the layout around the product; never change the product."
+      : "",
+    productLockActive && referenceImages.length
+      ? "FINAL SELF-CHECK BEFORE OUTPUT: compare the generated product against the Main Product reference. If a viewer could identify any changed shape, part, proportion, material boundary, opening, control, or detail, reject that draft and regenerate with the original product preserved."
       : "",
     hasInvisibleStyle
       ? "INVISIBLE STYLE TOKENS: a separate preprocessing step extracted abstract style tokens from hidden style-only references. The hidden source images are not available as visual content in this final generation step."
@@ -1806,9 +1815,10 @@ function buildTextImageLayoutPrompt(promptNodes: Node<CanvasNodeData>[], verifie
     "READ THIS AS A PRODUCTION SPEC, NOT AS CREATIVE INSPIRATION. The final image must satisfy every hard lock below.",
     "TASK TYPE LOCK: Create the requested Taobao e-commerce image module only. Do not create a multi-section reference board or standards page.",
     "Create one final e-commerce graphic image with product + text layout according to the cleaned connected prompt.",
-    "PRODUCT IDENTITY LOCK: when Product Lock is Strict, the attached non-style product images define the only allowed product. Preserve the same product type, silhouette, structure, proportions, color/material layout, transparent parts, openings, caps, connectors, and distinctive details. Do not generate a similar replacement product. Do not replace the product with cables, wires, generic bottles, other appliances, or unrelated props.",
+    "AUTOMATIC PRODUCT IDENTITY LOCK: whenever an attached image is declared as Main Product / 主产品 / 海报主产品, strict product lock is mandatory even if the connected prompt does not explicitly say Product Lock: Strict. The Main Product image is immutable visual truth. Preserve the exact product type, silhouette, outer contour, structure, proportions, camera viewpoint, perspective, visible faces, color/material layout, transparent parts, openings, caps, buttons, seams, connectors, markings, and distinctive details. Do not redesign, restyle, simplify, beautify into a different form, rotate to a different viewpoint, invent or remove parts, or generate a similar replacement product.",
+    "PRODUCT-OVER-LAYOUT PRIORITY: composition, typography, scene, lighting, aspect ratio, and style must adapt around the locked product. They are never permission to alter the product. If any instruction conflicts with product fidelity, preserve the product and revise only the surrounding layout.",
     "PROMPT ADHERENCE LOCK: the output must directly depict the Goal and Composition from the connected prompt. For a comparison/pain-point image, create the requested comparison layout and use only the locked product as the improved/solution product. Any pain-point side may use abstract/contextual clutter only; it must not replace the locked product.",
-    "FAIL CONDITIONS: wrong product, different product silhouette, unrelated object as the product, missing requested comparison/scene/goal, copied style board, extra unlisted text, or using a style reference as visual content.",
+    "FAIL CONDITIONS: any changed product shape, viewpoint, proportion, material boundary, opening, button, seam, attachment, marking, missing part, invented part, wrong product, different silhouette, unrelated object as the product, missing requested comparison/scene/goal, copied style board, extra unlisted text, or using a style reference as visual content.",
     "Respect the output specification written inside the prompt, especially resolution, aspect ratio, usage, and native composition fit.",
     "When the prompt includes a line such as 分辨率：750×1000 px or Resolution: 750x1000 px, compose the image natively for that exact size.",
     "Design the page as a polished image, not a UI screenshot unless explicitly requested.",
@@ -1981,7 +1991,7 @@ function getWorkflowColumns(selectedNodes: Node<CanvasNodeData>[], edges: Edge[]
   const others: Node<CanvasNodeData>[] = [];
 
   selectedNodes.forEach((node) => {
-    if (node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer") {
+    if (node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster") {
       aiPrompts.push(node);
       return;
     }
@@ -2002,7 +2012,7 @@ function getWorkflowColumns(selectedNodes: Node<CanvasNodeData>[], edges: Edge[]
       const outgoingIds = getConnectedNodeIds(edges, node.id, "outgoing");
       const isSchemePrompt = [...incomingIds].some((id) => {
         const sourceKind = selectedById.get(id)?.data.kind;
-        return sourceKind === "imageChat" || sourceKind === "sceneDirector" || sourceKind === "taobaoPageDirector" || sourceKind === "industrial_designer";
+        return sourceKind === "imageChat" || sourceKind === "sceneDirector" || sourceKind === "taobaoPageDirector" || sourceKind === "industrial_designer" || sourceKind === "product_poster";
       }) ||
         [...outgoingIds].some((id) => {
           const targetKind = selectedById.get(id)?.data.kind;
@@ -2123,7 +2133,7 @@ function normalizeHydratedNodes(nodes: Node<CanvasNodeData>[]) {
       ...nodeWithCurrentTitle,
       data: {
         ...nodeWithCurrentTitle.data,
-        errorMessage: nodeWithCurrentTitle.data.kind === "generateImage" || nodeWithCurrentTitle.data.kind === "hdRedraw" || nodeWithCurrentTitle.data.kind === "hdRedraw2" || nodeWithCurrentTitle.data.kind === "rhinoTest" || nodeWithCurrentTitle.data.kind === "textImageLayout" || nodeWithCurrentTitle.data.kind === "gridImage" || nodeWithCurrentTitle.data.kind === "sceneImage" || nodeWithCurrentTitle.data.kind === "industrialDesignImage" || nodeWithCurrentTitle.data.kind === "productRemix" || nodeWithCurrentTitle.data.kind === "imageChat" || nodeWithCurrentTitle.data.kind === "sceneDirector" || nodeWithCurrentTitle.data.kind === "taobaoPageDirector" || nodeWithCurrentTitle.data.kind === "industrial_designer" || nodeWithCurrentTitle.data.kind === "visual_director" ? "上次生成请求已中断，请重新 Run。" : nodeWithCurrentTitle.data.errorMessage,
+        errorMessage: nodeWithCurrentTitle.data.kind === "generateImage" || nodeWithCurrentTitle.data.kind === "hdRedraw" || nodeWithCurrentTitle.data.kind === "hdRedraw2" || nodeWithCurrentTitle.data.kind === "rhinoTest" || nodeWithCurrentTitle.data.kind === "textImageLayout" || nodeWithCurrentTitle.data.kind === "gridImage" || nodeWithCurrentTitle.data.kind === "sceneImage" || nodeWithCurrentTitle.data.kind === "industrialDesignImage" || nodeWithCurrentTitle.data.kind === "productRemix" || nodeWithCurrentTitle.data.kind === "imageChat" || nodeWithCurrentTitle.data.kind === "sceneDirector" || nodeWithCurrentTitle.data.kind === "taobaoPageDirector" || nodeWithCurrentTitle.data.kind === "industrial_designer" || nodeWithCurrentTitle.data.kind === "product_poster" || nodeWithCurrentTitle.data.kind === "visual_director" ? "上次生成请求已中断，请重新 Run。" : nodeWithCurrentTitle.data.errorMessage,
         generationId: undefined,
         runState: "failed" as const
       }
@@ -2231,6 +2241,7 @@ interface CanvasState {
   runSceneDirectorNode: (id: string, generationId: string) => Promise<void>;
   runTaobaoPageDirectorNode: (id: string, generationId: string) => Promise<void>;
   runIndustrialDesignerNode: (id: string, generationId: string) => Promise<void>;
+  runProductPosterNode: (id: string, generationId: string) => Promise<void>;
   runVisualDirectorNode: (id: string, generationId: string) => Promise<void>;
   runGenerateImageNode: (id: string, generationId: string) => Promise<void>;
   stopGenerateImageNode: (id: string) => void;
@@ -2457,6 +2468,28 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
                 schemes: "6",
                 structureLock: "严格保持",
                 visualStyle: "自动判断"
+              },
+              ...data
+            }
+        : kind === "product_poster"
+          ? {
+              modelId: defaultProductPosterModel,
+              modelParams: {
+                backgroundType: "自动",
+                colorStrategy: "自动提取",
+                copyLevels: "产品名,主标题,副标题,核心卖点,行动文案",
+                copySource: "AI 补全文案",
+                infoDensity: "标准",
+                layoutStructure: "自动",
+                outputLanguage: "中文",
+                posterPurpose: "产品主视觉",
+                productLock: "严格",
+                productPosition: "自动",
+                productScale: "大",
+                schemeDiversity: "高",
+                schemes: "4",
+                styleReferenceStrength: "中",
+                whitespace: "标准"
               },
               ...data
             }
@@ -3700,6 +3733,120 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       };
     });
   },
+  runProductPosterNode: async (id, generationId) => {
+    const snapshot = syncMentionImageEdgesForRunningTarget(id, generationId, get, set);
+    const source = snapshot.nodes.find((node) => node.id === id);
+    if (!source) return;
+    const inputNodes = getAgentInputNodesWithMentionedImages(snapshot.nodes, snapshot.edges, id);
+    const referenceImages = getReferenceImageNodes(inputNodes).map((node) => ({
+      imageNumber: typeof node.data.imageNumber === "number" ? node.data.imageNumber : undefined,
+      url: node.data.imageUrl as string
+    }));
+    const instruction = inputNodes
+      .filter((node) => typeof node.data.prompt === "string" && node.data.prompt.trim())
+      .map((node) => node.data.prompt)
+      .join("\n\n")
+      .trim();
+
+    const fail = (message: string) => set((state) => ({
+      nodes: state.nodes.map((node) => node.id === id && node.data.generationId === generationId
+        ? { ...node, data: { ...node.data, errorMessage: message, generationId: undefined, runState: "failed" as const } }
+        : node)
+    }));
+    if (!referenceImages.length) {
+      fail("请至少连接一张产品图片。");
+      return;
+    }
+    if (!instruction) {
+      fail("请连接前置 Prompt，并明确主产品图和风格参考图的角色。");
+      return;
+    }
+
+    let prompt = "";
+    let generatedSchemes: Array<{ prompt: string; title?: string }> = [];
+    const controller = new AbortController();
+    generationControllers.get(id)?.abort();
+    generationControllers.set(id, controller);
+    try {
+      const compressedImages = await prepareGenerationReferencePayloads(referenceImages);
+      const response = await fetch("/api/ai/product-poster", {
+        body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
+          images: compressedImages,
+          instruction,
+          model: typeof source.data.modelId === "string" ? source.data.modelId : defaultProductPosterModel,
+          params: source.data.modelParams ?? {},
+          sourceNodeId: id
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        signal: controller.signal
+      });
+      generationControllers.delete(id);
+      const current = get().nodes.find((node) => node.id === id);
+      if (current?.data.generationId !== generationId || current.data.runState !== "running") return;
+      const responseText = await response.text();
+      let payload: { prompt?: string; schemes?: Array<{ prompt?: string; title?: string }>; error?: string };
+      try {
+        payload = JSON.parse(responseText) as typeof payload;
+      } catch {
+        const fallback = responseText.trim().replace(/\s+/g, " ").slice(0, 160);
+        throw new Error(response.ok ? "AI 服务返回格式异常。" : `产品海报导演失败：${response.status}${fallback ? ` ${fallback}` : ""}`);
+      }
+      if (!response.ok) throw new Error(payload.error || `产品海报导演失败：${response.status}`);
+      generatedSchemes = (payload.schemes ?? []).map((scheme) => ({
+        prompt: typeof scheme.prompt === "string" ? scheme.prompt.trim() : "",
+        title: typeof scheme.title === "string" ? scheme.title.trim() : undefined
+      })).filter((scheme) => scheme.prompt);
+      prompt = typeof payload.prompt === "string" ? payload.prompt.trim() : "";
+      if (!prompt && generatedSchemes.length) prompt = generatedSchemes.map((scheme) => scheme.prompt).join("\n\n");
+      if (!generatedSchemes.length || !prompt) throw new Error("产品海报导演没有返回可用 Prompt。");
+    } catch (error) {
+      generationControllers.delete(id);
+      fail(error instanceof Error && error.name === "AbortError" ? "产品海报导演已停止。" : error instanceof Error ? error.message : "产品海报导演失败。");
+      return;
+    }
+
+    set((state) => {
+      const cleaned = removeConnectedGeneratedOutputs(state, id);
+      const currentSource = cleaned.nodes.find((node) => node.id === id);
+      if (!currentSource || currentSource.data.generationId !== generationId || currentSource.data.runState !== "running") return state;
+      let currentZIndex = state.globalZIndex;
+      const generatedAt = Date.now();
+      const positions = generatedSchemes.length > 1 ? findGeneratedOutputPositions(currentSource, cleaned.nodes, generatedSchemes.length) : [findSingleOutputPosition(currentSource, cleaned.nodes)];
+      const promptNodes = generatedSchemes.map((scheme, index) => {
+        currentZIndex = nextZIndex(currentZIndex);
+        return makeNode(`prompt-product-poster-${generatedAt}-${index + 1}-${Math.round(Math.random() * 1000)}`, "prompt", positions[index], currentZIndex, {
+          generatedBy: id,
+          prompt: scheme.prompt,
+          promptRichHtml: buildVisibleTextPromptRichHtml(scheme.prompt),
+          runState: "completed",
+          title: scheme.title || `产品海报 Prompt ${String(index + 1).padStart(2, "0")}`
+        });
+      });
+      const promptEdges: Edge[] = promptNodes.map((promptNode, index) => ({
+        id: `edge-product-poster-${generatedAt}-${index + 1}`,
+        source: id,
+        target: promptNode.id,
+        sourceHandle: "text-out",
+        targetHandle: "text-in",
+        type: "deletable",
+        selected: false,
+        data: { generatedBy: id, portType: "text" }
+      }));
+      return {
+        globalZIndex: currentZIndex,
+        activeEdgeId: null,
+        historyPast: pushHistory(state),
+        historyFuture: [],
+        nodes: [
+          ...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, prompt, runState: "completed" as const } } : node),
+          ...promptNodes
+        ],
+        edges: [...cleaned.edges, ...promptEdges]
+      };
+    });
+  },
   runTaobaoPageDirectorNode: async (id, generationId) => {
     const snapshot = syncMentionImageEdgesForRunningTarget(id, generationId, get, set);
     const source = snapshot.nodes.find((node) => node.id === id);
@@ -4132,9 +4279,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => {
       const selectedNodes = state.nodes.filter((node) => node.selected && node.data.kind !== "group");
       if (selectedNodes.length < 2) return state;
-      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
+      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
 
-      const useWorkflowLayout = selectedNodes.some((node) => node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix");
+      const useWorkflowLayout = selectedNodes.some((node) => node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix");
       const positions = useWorkflowLayout
         ? layoutColumns(selectedNodes, getWorkflowColumns(selectedNodes, state.edges))
         : layoutGrid(selectedNodes);

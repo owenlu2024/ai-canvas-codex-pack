@@ -35,6 +35,7 @@ import {
 } from "@/lib/generateImageModels";
 import { useCanvasStore } from "@/store/canvasStore";
 import { downloadImageToFile } from "@/lib/downloadImage";
+import { isVideoModel } from "@/lib/modelClassification";
 
 interface StoredApiSettings {
   imageModels: string[];
@@ -87,7 +88,8 @@ function useConfiguredImageModels(fallbackOptions: string[]) {
 }
 
 function useConfiguredTextModels(fallbackOptions: string[]) {
-  return useConfiguredModels("text", fallbackOptions);
+  const models = useConfiguredModels("text", fallbackOptions);
+  return useMemo(() => models.filter((model) => !isVideoModel(model)), [models]);
 }
 
 function usePromptPlannerModel(data: CanvasNodeData) {
@@ -109,6 +111,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const runSceneDirectorNode = useCanvasStore((state) => state.runSceneDirectorNode);
   const runTaobaoPageDirectorNode = useCanvasStore((state) => state.runTaobaoPageDirectorNode);
   const runIndustrialDesignerNode = useCanvasStore((state) => state.runIndustrialDesignerNode);
+  const runProductPosterNode = useCanvasStore((state) => state.runProductPosterNode);
   const runVisualDirectorNode = useCanvasStore((state) => state.runVisualDirectorNode);
   const runGenerateImageNode = useCanvasStore((state) => state.runGenerateImageNode);
   const stopGenerateImageNode = useCanvasStore((state) => state.stopGenerateImageNode);
@@ -138,14 +141,15 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const isSceneDirectorNode = data.kind === "sceneDirector";
   const isTaobaoPageDirectorNode = data.kind === "taobaoPageDirector";
   const isIndustrialDesignerNode = data.kind === "industrial_designer";
+  const isProductPosterNode = data.kind === "product_poster";
   const isVisualDirectorNode = data.kind === "visual_director";
-  const isPromptPlannerNode = isAiPromptNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isVisualDirectorNode;
+  const isPromptPlannerNode = isAiPromptNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode;
   const isImageNode = data.kind === "image";
   const isRunning = data.runState === "running";
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
   const displayTitle = imageNumber ? `Image ${imageNumber}` : data.title;
-  const nodeWidth = isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode ? 620 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const nodeHeight = isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const nodeWidth = isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
+  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
 
@@ -217,7 +221,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   };
 
   const run = () => {
-    if (isAiPromptNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isVisualDirectorNode) {
+    if (isAiPromptNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode) {
       if (data.runState === "running") {
         stopGenerateImageNode(id);
         return;
@@ -227,6 +231,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
       if (isSceneDirectorNode) void runSceneDirectorNode(id, generationId);
       else if (isTaobaoPageDirectorNode) void runTaobaoPageDirectorNode(id, generationId);
       else if (isIndustrialDesignerNode) void runIndustrialDesignerNode(id, generationId);
+      else if (isProductPosterNode) void runProductPosterNode(id, generationId);
       else if (isVisualDirectorNode) void runVisualDirectorNode(id, generationId);
       else void runAiPromptNode(id, generationId);
       return;
@@ -277,7 +282,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
             showDownloadImage={isImageNode}
           />
         ) : null}
-        canRun={isAiNode || isImageGeneratorNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isVisualDirectorNode}
+        canRun={isAiNode || isImageGeneratorNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode}
         onRun={run}
         runState={data.runState}
         title={displayTitle}
@@ -340,6 +345,9 @@ function renderContent(id: string, data: CanvasNodeData) {
   }
   if (data.kind === "industrial_designer") {
     return <IndustrialDesignerPanel id={id} data={data} />;
+  }
+  if (data.kind === "product_poster") {
+    return <ProductPosterPanel id={id} data={data} />;
   }
   if (data.kind === "visual_director") {
     return <VisualDirectorPanel id={id} data={data} />;
@@ -608,6 +616,99 @@ function SceneDirectorPanel({ id, data }: { id: string; data: CanvasNodeData }) 
             onChange={(value) => updateParam("sceneWeight", value)}
             value={nextParams.sceneWeight}
           />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+const posterCopyLevelOptions = ["品牌名", "产品名", "主标题", "英文标题", "副标题", "核心卖点", "产品参数", "价格信息", "促销角标", "行动文案", "页脚说明"];
+
+function ProductPosterPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const locked = data.runState === "running";
+  const { modelDisplayName, modelId, modelOptions } = usePromptPlannerModel(data);
+  const params = data.modelParams ?? {};
+  const read = (key: string, fallback: string) => typeof params[key] === "string" && params[key].trim() ? params[key] : fallback;
+  const nextParams = useMemo(() => ({
+    outputLanguage: read("outputLanguage", "中文"),
+    schemes: normalizeBoundedCount(params.schemes, 1, 9, 4),
+    schemeDiversity: read("schemeDiversity", "高"),
+    posterPurpose: read("posterPurpose", "产品主视觉"),
+    productLock: read("productLock", "严格"),
+    productPosition: read("productPosition", "自动"),
+    productScale: read("productScale", "大"),
+    layoutStructure: read("layoutStructure", "自动"),
+    infoDensity: read("infoDensity", "标准"),
+    whitespace: read("whitespace", "标准"),
+    styleReferenceStrength: read("styleReferenceStrength", "中"),
+    colorStrategy: read("colorStrategy", "自动提取"),
+    backgroundType: read("backgroundType", "自动"),
+    copySource: read("copySource", "AI 补全文案"),
+    copyLevels: read("copyLevels", "产品名,主标题,副标题,核心卖点,行动文案")
+  // params is persisted node state; deriving all controls together keeps older project files compatible.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [params]);
+
+  useEffect(() => {
+    const sameModel = data.modelId === modelId;
+    const sameParams = Object.entries(nextParams).every(([key, value]) => data.modelParams?.[key] === value);
+    if (sameModel && sameParams) return;
+    updateNodeData(id, { modelId, modelParams: { ...params, ...nextParams } });
+  }, [data.modelId, data.modelParams, id, modelId, nextParams, params, updateNodeData]);
+
+  const updateParam = (key: keyof typeof nextParams, value: string) => {
+    if (locked) return;
+    updateNodeData(id, { modelParams: { ...params, [key]: value } });
+  };
+  const selectedCopyLevels = new Set(nextParams.copyLevels.split(",").filter(Boolean));
+  const toggleCopyLevel = (level: string) => {
+    const next = new Set(selectedCopyLevels);
+    if (next.has(level)) next.delete(level);
+    else next.add(level);
+    updateParam("copyLevels", posterCopyLevelOptions.filter((item) => next.has(item)).join(","));
+  };
+
+  return (
+    <div className="nodrag nopan nowheel grid gap-4 pt-1">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-3">
+          <GenerateSelect disabled={locked} label="AI 模型" onChange={(value) => updateNodeData(id, { modelId: value })} options={modelOptions} renderValue={modelDisplayName} value={modelId} />
+        </div>
+        <GenerateSelect disabled={locked} label="输出语言" onChange={(value) => updateParam("outputLanguage", value)} options={["中文", "英文", "中英双语"]} value={nextParams.outputLanguage} />
+        <GenerateNumberInput disabled={locked} label="Prompt 数量" max={9} min={1} onChange={(value) => updateParam("schemes", value)} value={nextParams.schemes} />
+        <GenerateSelect disabled={locked} label="方案差异" onChange={(value) => updateParam("schemeDiversity", value)} options={["低", "中", "高"]} value={nextParams.schemeDiversity} />
+        <GenerateSelect disabled={locked} label="海报用途" onChange={(value) => updateParam("posterPurpose", value)} options={["产品主视觉", "新品发布", "促销活动", "品牌海报", "社交媒体", "电商主图"]} value={nextParams.posterPurpose} />
+        <GenerateSelect disabled={locked} label="产品锁定" onChange={(value) => updateParam("productLock", value)} options={["严格", "标准", "灵活"]} value={nextParams.productLock} />
+      </div>
+      <section className="rounded-[14px] border border-[#E1E5EE] bg-white/80 p-4">
+        <h3 className="mb-3 text-[14px] font-bold text-primary">产品与版式</h3>
+        <div className="grid grid-cols-3 gap-4">
+          <GenerateSelect disabled={locked} label="产品位置" onChange={(value) => updateParam("productPosition", value)} options={["自动", "居中", "左侧", "右侧", "顶部", "底部"]} value={nextParams.productPosition} />
+          <GenerateSelect disabled={locked} label="产品占比" onChange={(value) => updateParam("productScale", value)} options={["小", "中", "大", "超大主体"]} value={nextParams.productScale} />
+          <GenerateSelect disabled={locked} label="版式结构" onChange={(value) => updateParam("layoutStructure", value)} options={["自动", "中心主视觉", "左文右图", "左图右文", "上文下图", "上图下文", "大标题叠加", "满版沉浸", "几何分割"]} value={nextParams.layoutStructure} />
+          <GenerateSelect disabled={locked} label="信息密度" onChange={(value) => updateParam("infoDensity", value)} options={["极简", "标准", "高信息量"]} value={nextParams.infoDensity} />
+          <GenerateSelect disabled={locked} label="留白程度" onChange={(value) => updateParam("whitespace", value)} options={["少", "标准", "多"]} value={nextParams.whitespace} />
+          <GenerateSelect disabled={locked} label="背景类型" onChange={(value) => updateParam("backgroundType", value)} options={["自动", "纯色", "渐变", "场景", "抽象图形", "材质背景", "摄影棚"]} value={nextParams.backgroundType} />
+        </div>
+      </section>
+      <section className="rounded-[14px] border border-[#E1E5EE] bg-white/80 p-4">
+        <h3 className="mb-3 text-[14px] font-bold text-primary">风格与文案</h3>
+        <div className="grid grid-cols-3 gap-4">
+          <GenerateSelect disabled={locked} label="风格参考强度" onChange={(value) => updateParam("styleReferenceStrength", value)} options={["不使用", "弱", "中", "强"]} value={nextParams.styleReferenceStrength} />
+          <GenerateSelect disabled={locked} label="色彩策略" onChange={(value) => updateParam("colorStrategy", value)} options={["自动提取", "跟随产品", "跟随风格参考", "高对比", "柔和统一", "黑白高级"]} value={nextParams.colorStrategy} />
+          <GenerateSelect disabled={locked} label="文案来源" onChange={(value) => updateParam("copySource", value)} options={["使用前置 Prompt", "AI 补全文案", "AI 重新创作", "只保留指定文案", "无文字海报"]} value={nextParams.copySource} />
+        </div>
+        <div className="mt-4">
+          <span className="mb-2 block text-[13px] font-medium text-[#525866]">画面文案层级</span>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {posterCopyLevelOptions.map((level) => (
+              <label className="flex items-center gap-1.5 text-[12px] font-semibold text-[#525866]" key={level}>
+                <input checked={selectedCopyLevels.has(level)} className="h-3.5 w-3.5 accent-[#6C63FF]" disabled={locked} onChange={() => toggleCopyLevel(level)} type="checkbox" />
+                {level}
+              </label>
+            ))}
+          </div>
         </div>
       </section>
     </div>

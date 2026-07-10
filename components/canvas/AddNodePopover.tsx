@@ -68,7 +68,9 @@ const categories: AddNodeCategory[] = [
   {
     id: "graphic",
     title: "平面设计",
-    skillOptions: [],
+    skillOptions: [
+      { kind: "product_poster", label: "产品海报导演", description: "产品海报 Prompt 策划" }
+    ],
     imageOptions: [
       { kind: "visual_director", label: "Visual Director", description: "视觉规范师" },
       { kind: "textImageLayout", label: "Text Image Layout", description: "图文混排成图" }

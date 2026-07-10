@@ -15,6 +15,7 @@ interface ModelResponse {
   imageModels: string[];
   source?: string;
   textModels: string[];
+  videoModels: string[];
   error?: string;
 }
 
@@ -25,6 +26,7 @@ interface StoredApiSettings {
   agnesSettings: ApiSettings;
   imageModels: string[];
   textModels: string[];
+  videoModels: string[];
   savedAt: string;
 }
 
@@ -98,6 +100,7 @@ function readStoredSettings(): StoredApiSettings | null {
     savedAt: new Date().toISOString(),
     settings: { ...emptySettings, ...legacySettings },
     textModels: [],
+    videoModels: [],
     version: 1
   };
 }
@@ -131,6 +134,7 @@ export function SettingsPanel() {
   const [apiConfigs, setApiConfigs] = useState<ApiSettings[]>([emptySettings]);
   const [imageModels, setImageModels] = useState<string[]>([]);
   const [textModels, setTextModels] = useState<string[]>([]);
+  const [videoModels, setVideoModels] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
@@ -163,6 +167,7 @@ export function SettingsPanel() {
           setApiConfigs(configs);
           setImageModels(configs.length > 1 ? prefixModelsForPrimary(saved.imageModels ?? []) : unprefixPrimaryModels(saved.imageModels ?? []));
           setTextModels(configs.length > 1 ? prefixModelsForPrimary(saved.textModels ?? []) : unprefixPrimaryModels(saved.textModels ?? []));
+          setVideoModels(configs.length > 1 ? prefixModelsForPrimary(saved.videoModels ?? []) : unprefixPrimaryModels(saved.videoModels ?? []));
           setSavedAt(saved.savedAt);
           setHydrated(true);
           return;
@@ -181,6 +186,7 @@ export function SettingsPanel() {
           setApiConfigs(configs);
           setImageModels(configs.length > 1 ? prefixModelsForPrimary(saved.imageModels ?? []) : unprefixPrimaryModels(saved.imageModels ?? []));
           setTextModels(configs.length > 1 ? prefixModelsForPrimary(saved.textModels ?? []) : unprefixPrimaryModels(saved.textModels ?? []));
+          setVideoModels(configs.length > 1 ? prefixModelsForPrimary(saved.videoModels ?? []) : unprefixPrimaryModels(saved.videoModels ?? []));
           setSavedAt(saved.savedAt);
           setHydrated(true);
           return;
@@ -201,7 +207,8 @@ export function SettingsPanel() {
   const persistSettings = useCallback(async (
     nextApiConfigs = apiConfigs,
     nextImageModels = imageModels,
-    nextTextModels = textModels
+    nextTextModels = textModels,
+    nextVideoModels = videoModels
   ) => {
     const normalizedApiConfigs = ensureApiIds(nextApiConfigs);
     const nextSavedAt = new Date().toISOString();
@@ -212,6 +219,7 @@ export function SettingsPanel() {
       savedAt: nextSavedAt,
       settings: normalizedApiConfigs[0] ?? emptySettings,
       textModels: nextTextModels,
+      videoModels: nextVideoModels,
       version: 1
     };
 
@@ -225,7 +233,7 @@ export function SettingsPanel() {
     setSavedAt(nextSavedAt);
     setSaveError("");
     window.dispatchEvent(new Event("ai-canvas-api-settings-updated"));
-  }, [apiConfigs, imageModels, textModels]);
+  }, [apiConfigs, imageModels, textModels, videoModels]);
 
   useEffect(() => {
     if (!hydrated || !open) return undefined;
@@ -267,6 +275,7 @@ export function SettingsPanel() {
       if (current.length === 1) {
         setImageModels((models) => prefixModelsForPrimary(models));
         setTextModels((models) => prefixModelsForPrimary(models));
+        setVideoModels((models) => prefixModelsForPrimary(models));
       }
       setStatus(`已添加 ${nextId} AI。`);
       return next;
@@ -280,10 +289,12 @@ export function SettingsPanel() {
       const next = ensureApiIds(current.filter((_, configIndex) => configIndex !== index));
       const nextImageModels = removeModelsForApi(imageModels, removedId, next.length);
       const nextTextModels = removeModelsForApi(textModels, removedId, next.length);
+      const nextVideoModels = removeModelsForApi(videoModels, removedId, next.length);
       setImageModels(nextImageModels);
       setTextModels(nextTextModels);
+      setVideoModels(nextVideoModels);
       setStatus(`已删除 ${removedId} AI，并清理它的模型。`);
-      void persistSettings(next, nextImageModels, nextTextModels);
+      void persistSettings(next, nextImageModels, nextTextModels, nextVideoModels);
       return next;
     });
   };
@@ -309,10 +320,12 @@ export function SettingsPanel() {
       const hasMultipleApis = apiConfigs.length > 1;
       const nextImageModels = replaceModelsForApi(imageModels, apiId, data.imageModels, hasMultipleApis);
       const nextTextModels = replaceModelsForApi(textModels, apiId, data.textModels, hasMultipleApis);
+      const nextVideoModels = replaceModelsForApi(videoModels, apiId, data.videoModels ?? [], hasMultipleApis);
       setImageModels(nextImageModels);
       setTextModels(nextTextModels);
-      setStatus(`${apiId} AI 连接成功，已读取 ${data.imageModels.length + data.textModels.length} 个模型。`);
-      void persistSettings(apiConfigs, nextImageModels, nextTextModels);
+      setVideoModels(nextVideoModels);
+      setStatus(`${apiId} AI 连接成功，已读取 ${data.imageModels.length + data.textModels.length + (data.videoModels?.length ?? 0)} 个模型。`);
+      void persistSettings(apiConfigs, nextImageModels, nextTextModels, nextVideoModels);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : `${apiId} AI 连接失败，请检查配置。`);
     } finally {
@@ -424,7 +437,7 @@ export function SettingsPanel() {
               <button
                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[9px] border border-line bg-white px-2.5 text-xs font-bold text-primary shadow-sm transition hover:bg-[#F7F8FB]"
                 onClick={() => {
-                  void persistSettings(apiConfigs, imageModels, textModels);
+                  void persistSettings(apiConfigs, imageModels, textModels, videoModels);
                   setStatus("已保存到当前浏览器。");
                 }}
                 type="button"
@@ -440,7 +453,7 @@ export function SettingsPanel() {
             </div>
           );
         })}
-        <div className="grid grid-cols-2 gap-2 rounded-[12px] border border-line bg-[#FBFCFE] p-2.5">
+        <div className="grid grid-cols-3 gap-2 rounded-[12px] border border-line bg-[#FBFCFE] p-2.5">
           <div>
             <p className="text-[11px] font-bold text-secondary">图像模型</p>
             <p className="mt-1 text-lg font-bold text-primary">{imageModels.length}</p>
@@ -448,6 +461,10 @@ export function SettingsPanel() {
           <div>
             <p className="text-[11px] font-bold text-secondary">文本模型</p>
             <p className="mt-1 text-lg font-bold text-primary">{textModels.length}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-secondary">视频模型</p>
+            <p className="mt-1 text-lg font-bold text-primary">{videoModels.length}</p>
           </div>
         </div>
       </div>

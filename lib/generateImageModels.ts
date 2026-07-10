@@ -1,6 +1,6 @@
 import { getBaseModelId } from "@/lib/clientAiSettings";
 
-export type GenerateImageModelId = "gpt-image-2" | "gemini-3.1-flash-image-preview" | "gemini-3.1-flash-lite-image" | "gemini-3-pro-image-preview" | "agnes-image-2.1-flash";
+export type GenerateImageModelId = "gpt-image-2" | "gemini-3.1-flash-image" | "gemini-3.1-flash-image-preview" | "gemini-3.1-flash-lite-image" | "gemini-3-pro-image" | "gemini-3-pro-image-preview" | "agnes-image-2.1-flash";
 
 export type GenerateImageParamKey = "aspectRatio" | "resolution" | "quality" | "imageCount" | "size";
 
@@ -90,6 +90,18 @@ const geminiFlashLiteImageModelSpec: GenerateImageModelSpec = {
   ]
 };
 
+const gemini31FlashImageModelSpec: GenerateImageModelSpec = {
+  id: "gemini-3.1-flash-image",
+  label: "gemini-3.1-flash-image",
+  params: [aspectRatioParam, geminiResolutionParam, imageCountParam]
+};
+
+const gemini3ProImageModelSpec: GenerateImageModelSpec = {
+  id: "gemini-3-pro-image",
+  label: "gemini-3-pro-image",
+  params: [aspectRatioParam, geminiResolutionParam, imageCountParam]
+};
+
 export const generateImageModelSpecs: GenerateImageModelSpec[] = [
   {
     id: "gpt-image-2",
@@ -110,6 +122,7 @@ export const generateImageModelSpecs: GenerateImageModelSpec[] = [
       imageCountParam
     ]
   },
+  gemini31FlashImageModelSpec,
   geminiFlashLiteImageModelSpec,
   {
     id: "gemini-3-pro-image-preview",
@@ -120,6 +133,7 @@ export const generateImageModelSpecs: GenerateImageModelSpec[] = [
       imageCountParam
     ]
   },
+  gemini3ProImageModelSpec,
   agnesImageModelSpec
 ];
 
@@ -142,6 +156,10 @@ export const gridImageModelSpecs: GenerateImageModelSpec[] = [
       aspectRatioParam,
       geminiResolutionParam
     ]
+  },
+  {
+    ...gemini31FlashImageModelSpec,
+    params: [aspectRatioParam, geminiResolutionParam]
   },
   {
     ...geminiFlashLiteImageModelSpec,
@@ -174,7 +192,9 @@ export const sceneImageModelSpecs: GenerateImageModelSpec[] = [
       imageCountParam
     ]
   },
+  gemini31FlashImageModelSpec,
   geminiFlashLiteImageModelSpec,
+  gemini3ProImageModelSpec,
   {
     id: "gemini-3-pro-image-preview",
     label: "gemini-3-pro-image-preview",
@@ -201,8 +221,10 @@ export function getReferenceImageLimit(modelId?: string) {
   modelId = getBaseModelId(modelId);
   if (modelId === "gpt-image-2") return 5;
   if (modelId === "gemini-3.1-flash-image-preview") return 14;
+  if (modelId === "gemini-3.1-flash-image") return 14;
   if (modelId === "gemini-3.1-flash-lite-image") return 14;
   if (modelId === "gemini-3-pro-image-preview") return 14;
+  if (modelId === "gemini-3-pro-image") return 14;
   if (modelId === "agnes-image-2.1-flash") return 5;
   return 5;
 }

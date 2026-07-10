@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readEnvApiSettings } from "@/lib/serverAiSettings";
 import { getCanvasDataDir, getCanvasDataPath } from "@/lib/serverPaths";
 import { parseHttpUrl } from "@/lib/urlSafety";
+import { isVideoModel } from "@/lib/modelClassification";
 
 interface ApiSettings {
   baseUrl: string;
@@ -17,6 +18,7 @@ interface StoredApiSettings {
   apiConfigs: ApiSettings[];
   imageModels: string[];
   textModels: string[];
+  videoModels: string[];
   savedAt: string;
 }
 
@@ -63,13 +65,15 @@ function uniqueStrings(values: unknown[] | undefined) {
 
 function normalizeStoredSettings(value: Partial<StoredApiSettings>): StoredApiSettings {
   const apiConfigs = normalizeApiConfigs(value);
+  const storedTextModels = uniqueStrings(value.textModels);
   return {
     version: 1,
     settings: apiConfigs[0] ?? emptySettings,
     agnesSettings: apiConfigs[1] ?? defaultAgnesSettings,
     apiConfigs,
     imageModels: uniqueStrings(value.imageModels),
-    textModels: uniqueStrings(value.textModels),
+    textModels: storedTextModels.filter((model) => !isVideoModel(model)),
+    videoModels: uniqueStrings([...(value.videoModels ?? []), ...storedTextModels.filter(isVideoModel)]),
     savedAt: typeof value.savedAt === "string" ? value.savedAt : new Date().toISOString()
   };
 }

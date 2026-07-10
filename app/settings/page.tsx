@@ -14,6 +14,7 @@ interface ApiSettings {
 interface ModelResponse {
   imageModels: string[];
   textModels: string[];
+  videoModels: string[];
   error?: string;
 }
 
@@ -24,6 +25,7 @@ interface StoredApiSettings {
   apiConfigs?: ApiSettings[];
   imageModels: string[];
   textModels: string[];
+  videoModels: string[];
   savedAt: string;
 }
 
@@ -59,6 +61,7 @@ function readStoredSettings(): StoredApiSettings | null {
     apiConfigs: [{ ...emptySettings, ...legacySettings }],
     imageModels: [],
     textModels: [],
+    videoModels: [],
     savedAt: new Date().toISOString()
   };
 }
@@ -101,6 +104,7 @@ export default function SettingsPage() {
   const [apiConfigs, setApiConfigs] = useState<ApiSettings[]>([emptySettings]);
   const [imageModels, setImageModels] = useState<string[]>([]);
   const [textModels, setTextModels] = useState<string[]>([]);
+  const [videoModels, setVideoModels] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
@@ -119,6 +123,7 @@ export default function SettingsPage() {
           setApiConfigs(saved.apiConfigs?.length ? saved.apiConfigs : [{ ...emptySettings, ...saved.settings }]);
           setImageModels(saved.imageModels ?? []);
           setTextModels(saved.textModels ?? []);
+          setVideoModels(saved.videoModels ?? []);
           setSavedAt(saved.savedAt);
           setHydrated(true);
           return;
@@ -135,6 +140,7 @@ export default function SettingsPage() {
           setApiConfigs(saved.apiConfigs?.length ? saved.apiConfigs : [{ ...emptySettings, ...saved.settings }]);
           setImageModels(saved.imageModels ?? []);
           setTextModels(saved.textModels ?? []);
+          setVideoModels(saved.videoModels ?? []);
           setSavedAt(saved.savedAt);
         }
       } catch {
@@ -151,7 +157,7 @@ export default function SettingsPage() {
     };
   }, []);
 
-  const persistSettings = useCallback(async (nextSettings = settings, nextImageModels = imageModels, nextTextModels = textModels) => {
+  const persistSettings = useCallback(async (nextSettings = settings, nextImageModels = imageModels, nextTextModels = textModels, nextVideoModels = videoModels) => {
     const nextSavedAt = new Date().toISOString();
     const nextApiConfigs = [
       { ...nextSettings, id: "001" },
@@ -164,6 +170,7 @@ export default function SettingsPage() {
       apiConfigs: nextApiConfigs,
       imageModels: nextImageModels,
       textModels: nextTextModels,
+      videoModels: nextVideoModels,
       savedAt: nextSavedAt
     };
 
@@ -176,7 +183,7 @@ export default function SettingsPage() {
 
     setSavedAt(nextSavedAt);
     setSaveError("");
-  }, [apiConfigs, imageModels, settings, textModels]);
+  }, [apiConfigs, imageModels, settings, textModels, videoModels]);
 
   const saveSettings = () => {
     void persistSettings();
@@ -215,13 +222,16 @@ export default function SettingsPage() {
 
       const nextImageModels = replacePrimaryModels(imageModels, data.imageModels, apiConfigs.length > 1);
       const nextTextModels = replacePrimaryModels(textModels, data.textModels, apiConfigs.length > 1);
+      const nextVideoModels = replacePrimaryModels(videoModels, data.videoModels ?? [], apiConfigs.length > 1);
       setImageModels(nextImageModels);
       setTextModels(nextTextModels);
-      setStatus(`已读取并保存 ${data.imageModels.length + data.textModels.length} 个模型。`);
-      void persistSettings(settings, nextImageModels, nextTextModels);
+      setVideoModels(nextVideoModels);
+      setStatus(`已读取并保存 ${data.imageModels.length + data.textModels.length + (data.videoModels?.length ?? 0)} 个模型。`);
+      void persistSettings(settings, nextImageModels, nextTextModels, nextVideoModels);
     } catch (error) {
       setImageModels([]);
       setTextModels([]);
+      setVideoModels([]);
       setStatus(error instanceof Error ? error.message : "连接失败，请检查配置。");
     } finally {
       setLoading(false);

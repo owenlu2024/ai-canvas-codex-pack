@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeHttpBaseUrl } from "@/lib/urlSafety";
+import { classifyAiModel } from "@/lib/modelClassification";
 
 interface ProviderModel {
   id?: string;
@@ -17,13 +18,6 @@ interface ModelListResult {
 function normalizeBaseUrl(value: string) {
   if (!value.trim()) return "";
   return normalizeHttpBaseUrl(value, "v1");
-}
-
-function classifyModel(id: string) {
-  const normalized = id.toLowerCase();
-  const imageHints = ["image", "img", "dall", "flux", "stable", "sd", "midjourney", "mj", "imagen", "kling"];
-  if (imageHints.some((hint) => normalized.includes(hint))) return "image";
-  return "text";
 }
 
 function uniqueSorted(values: string[]) {
@@ -166,13 +160,15 @@ export async function POST(request: NextRequest) {
     }
 
     const ids = result.ids;
-    const imageModels = uniqueSorted(ids.filter((id) => classifyModel(id) === "image"));
-    const textModels = uniqueSorted(ids.filter((id) => classifyModel(id) === "text"));
+    const imageModels = uniqueSorted(ids.filter((id) => classifyAiModel(id) === "image"));
+    const textModels = uniqueSorted(ids.filter((id) => classifyAiModel(id) === "text"));
+    const videoModels = uniqueSorted(ids.filter((id) => classifyAiModel(id) === "video"));
 
     return NextResponse.json({
       imageModels,
       source: result.source,
-      textModels
+      textModels,
+      videoModels
     });
   } catch (error) {
     console.error("[ai/models] unexpected error", error);
