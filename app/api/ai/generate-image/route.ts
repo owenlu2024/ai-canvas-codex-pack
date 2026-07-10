@@ -239,6 +239,7 @@ function isGeminiImageModel(model: string) {
 function getAdapterName(model: string) {
   if (model === "gpt-image-2") return "gpt-image-2";
   if (model === "gemini-3.1-flash-image-preview") return "gemini-3.1-flash-image-preview";
+  if (model === "gemini-3.1-flash-lite-image") return "gemini-3.1-flash-lite-image";
   if (model === "gemini-3-pro-image-preview") return "gemini-3-pro-image-preview";
   return "";
 }
@@ -679,6 +680,8 @@ async function buildAsyncSubmit(context: SubmitContext): Promise<AsyncSubmit> {
       return buildGptImage2Submit(context);
     case "gemini-3.1-flash-image-preview":
       return buildGemini31FlashImageSubmit(context);
+    case "gemini-3.1-flash-lite-image":
+      return buildGeminiImageSubmit(context);
     case "gemini-3-pro-image-preview":
       return buildGemini3ProImageSubmit(context);
     default:

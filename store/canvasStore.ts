@@ -95,7 +95,7 @@ function is12AiDirectBaseUrl(value?: string) {
 }
 
 function isDirectGeminiImageModel(model?: unknown) {
-  return model === "gemini-3.1-flash-image-preview" || model === "gemini-3-pro-image-preview";
+  return model === "gemini-3.1-flash-image-preview" || model === "gemini-3.1-flash-lite-image" || model === "gemini-3-pro-image-preview";
 }
 
 function isDirectGptImageModel(model?: unknown) {
