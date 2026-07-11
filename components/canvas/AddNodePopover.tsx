@@ -62,6 +62,7 @@ const categories: AddNodeCategory[] = [
     ],
     imageOptions: [
       { kind: "industrialDesignImage", label: "ID Image", description: "工业设计成图" },
+      { kind: "rhinoTest", label: "Rhino 测试", description: "锁定 Rhino 产品图生成渲染" },
       { kind: "productRemix", label: "产品 Remix 合成器", description: "产品融合宫格图" }
     ]
   },
