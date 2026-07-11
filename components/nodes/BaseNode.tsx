@@ -178,7 +178,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   }
 
   const clear = () => {
-    updateNodeData(id, { imageUrl: undefined, prompt: "", runState: "idle" }, { record: true });
+    updateNodeData(id, { generatedBy: undefined, imageUrl: undefined, modelId: undefined, prompt: "", runState: "idle" }, { record: true });
   };
 
   const downloadImage = async () => {
@@ -288,6 +288,11 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
         title={displayTitle}
       />
       <div className="px-[18px] pb-[18px]">{renderContent(id, data)}</div>
+      {isImageNode && data.generatedBy && data.modelId ? (
+        <div className="pointer-events-none absolute bottom-[5px] left-[18px] max-w-[284px] truncate text-[8px] font-medium leading-none text-[#A3A9B5]" title={data.modelId}>
+          {data.modelId}
+        </div>
+      ) : null}
       {(isImageGeneratorNode || isPromptPlannerNode) && data.runState === "failed" && data.errorMessage ? (
         <div className="absolute bottom-3 left-[18px] right-[18px] truncate text-[11px] font-semibold text-danger" title={data.errorMessage}>
           {data.errorMessage}
@@ -2253,7 +2258,7 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = () => {
-      updateNodeData(id, { imageUrl: String(reader.result), runState: "idle" }, { record: true });
+      updateNodeData(id, { generatedBy: undefined, imageUrl: String(reader.result), modelId: undefined, runState: "idle" }, { record: true });
     };
     reader.readAsDataURL(file);
   };
