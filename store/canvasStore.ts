@@ -2688,6 +2688,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             generatedBy: id,
             imageNumber: bImageNumber,
             imageUrl: mergeImageUrl,
+            modelId,
             prompt: hdRedrawMergePrompt,
             runState: "completed",
             title: "高清重绘 B 合图"
@@ -2866,6 +2867,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             generatedBy: id,
             imageNumber,
             imageUrl: finalImageUrl,
+            modelId,
             prompt: finalPrompt,
             runState: "completed",
             title: "高清重绘 C 高清图"
@@ -3247,6 +3249,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             generatedBy: id,
             imageNumber,
             imageUrl: image.url,
+            modelId,
             title: source.data.kind === "sceneImage"
               ? source.data.modelParams?.gridEnabled === "true" ? `Scene Grid Image ${String(Math.min(10, promptNodes.length)).padStart(2, "0")}` : "Scene Image"
               : source.data.kind === "industrialDesignImage"
@@ -3409,6 +3412,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               generatedBy: id,
               imageNumber,
               imageUrl,
+              modelId: visualModel,
               prompt: boardPrompt,
               runState: "completed",
               title: "Visual Guideline Board"
