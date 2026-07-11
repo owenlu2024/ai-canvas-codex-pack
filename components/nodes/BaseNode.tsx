@@ -52,6 +52,7 @@ const openPromptEditorEvent = "ai-canvas-open-prompt-editor";
 
 function useConfiguredModels(kind: "image" | "text", fallbackOptions: string[]) {
   const [models, setModels] = useState<string[]>(fallbackOptions);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const loadModels = () => {
@@ -61,6 +62,8 @@ function useConfiguredModels(kind: "image" | "text", fallbackOptions: string[]) 
         setModels(configuredModels.length ? configuredModels : fallbackOptions);
       } catch {
         setModels(fallbackOptions);
+      } finally {
+        setLoaded(true);
       }
     };
     loadModels();
@@ -72,28 +75,35 @@ function useConfiguredModels(kind: "image" | "text", fallbackOptions: string[]) 
     };
   }, [fallbackOptions, kind]);
 
-  return models;
+  return { loaded, models };
 }
 
-function useConfiguredImageModels(fallbackOptions: string[]) {
-  const models = useConfiguredModels("image", fallbackOptions);
+function useConfiguredImageModels(fallbackOptions: string[], currentModel?: string) {
+  const { loaded, models } = useConfiguredModels("image", fallbackOptions);
   const fallbackSet = useMemo(() => new Set(fallbackOptions), [fallbackOptions]);
   return useMemo(() => {
     const filtered = models.filter((model) => {
       const baseModel = getBaseModelId(model);
       return typeof baseModel === "string" && fallbackSet.has(baseModel);
     });
+    if (!loaded && currentModel && fallbackSet.has(getBaseModelId(currentModel) ?? "") && !filtered.includes(currentModel)) {
+      return [currentModel, ...filtered];
+    }
     return filtered.length ? filtered : fallbackOptions;
-  }, [fallbackOptions, fallbackSet, models]);
+  }, [currentModel, fallbackOptions, fallbackSet, loaded, models]);
 }
 
-function useConfiguredTextModels(fallbackOptions: string[]) {
-  const models = useConfiguredModels("text", fallbackOptions);
-  return useMemo(() => models.filter((model) => !isVideoModel(model)), [models]);
+function useConfiguredTextModels(fallbackOptions: string[], currentModel?: string) {
+  const { loaded, models } = useConfiguredModels("text", fallbackOptions);
+  return useMemo(() => {
+    const filtered = models.filter((model) => !isVideoModel(model));
+    if (!loaded && currentModel && !isVideoModel(currentModel) && !filtered.includes(currentModel)) return [currentModel, ...filtered];
+    return filtered;
+  }, [currentModel, loaded, models]);
 }
 
 function usePromptPlannerModel(data: CanvasNodeData) {
-  const modelOptions = useConfiguredTextModels(promptPlannerModelOptions);
+  const modelOptions = useConfiguredTextModels(promptPlannerModelOptions, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId) ? data.modelId : modelOptions[0] ?? "gemini-2.5-flash";
   return { modelDisplayName, modelId, modelOptions };
@@ -1088,7 +1098,7 @@ function IndustrialDesignerPanel({ id, data }: { id: string; data: CanvasNodeDat
 function VisualDirectorPanel({ id, data }: { id: string; data: CanvasNodeData }) {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const locked = data.runState === "running";
-  const modelOptions = useConfiguredImageModels(generateImageModelIds);
+  const modelOptions = useConfiguredImageModels(generateImageModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const modelId = typeof data.modelId === "string" && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId)) ? data.modelId : modelOptions[0] ?? defaultGenerateImageModelId;
   const params = data.modelParams ?? {};
@@ -1166,7 +1176,7 @@ function GenerateImagePanel({ id, data, showGridOption = true }: { id: string; d
     .map((edge) => state.nodes.find((node) => node.id === edge.source))
     .filter((node) => typeof node?.data.prompt === "string" && node.data.prompt.trim()).length
   );
-  const modelOptions = useConfiguredImageModels(generateImageModelIds);
+  const modelOptions = useConfiguredImageModels(generateImageModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
@@ -1314,7 +1324,7 @@ function HdRedrawPanel({ id, data, step }: { id: string; data: CanvasNodeData; s
     .map((edge) => state.nodes.find((node) => node.id === edge.source))
     .filter((node) => typeof node?.data.prompt === "string" && node.data.prompt.trim()).length
   );
-  const modelOptions = useConfiguredImageModels(generateImageModelIds);
+  const modelOptions = useConfiguredImageModels(generateImageModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
@@ -1439,7 +1449,7 @@ function RhinoTestPanel({ id, data }: { id: string; data: CanvasNodeData }) {
 
 function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }) {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
-  const modelOptions = useConfiguredImageModels(generateImageModelIds);
+  const modelOptions = useConfiguredImageModels(generateImageModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && generateImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGenerateImageModelId;
@@ -1542,7 +1552,7 @@ function GridImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
     .map((edge) => state.nodes.find((node) => node.id === edge.source))
     .filter((node) => typeof node?.data.prompt === "string" && node.data.prompt.trim()).length
   );
-  const modelOptions = useConfiguredImageModels(gridImageModelIds);
+  const modelOptions = useConfiguredImageModels(gridImageModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && gridImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGridImageModelId;
@@ -1610,7 +1620,7 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
     .map((edge) => state.nodes.find((node) => node.id === edge.source))
     .filter((node) => typeof node?.data.prompt === "string" && node.data.prompt.trim()).length
   );
-  const modelOptions = useConfiguredImageModels(sceneImageModelIds);
+  const modelOptions = useConfiguredImageModels(sceneImageModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && sceneImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultSceneImageModelId;
@@ -1724,7 +1734,7 @@ function IndustrialDesignImagePanel({ id, data }: { id: string; data: CanvasNode
     .map((edge) => state.nodes.find((node) => node.id === edge.source))
     .filter((node) => typeof node?.data.prompt === "string" && node.data.prompt.trim()).length
   );
-  const modelOptions = useConfiguredImageModels(industrialDesignImageModelIds);
+  const modelOptions = useConfiguredImageModels(industrialDesignImageModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && industrialDesignImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultIndustrialDesignImageModelId;
@@ -1873,7 +1883,7 @@ function ProductRemixPanel({ id, data }: { id: string; data: CanvasNodeData }) {
     .map((edge) => state.nodes.find((node) => node.id === edge.source))
     .filter((node) => typeof node?.data.prompt === "string" && node.data.prompt.trim()).length
   );
-  const modelOptions = useConfiguredImageModels(productRemixModelIds);
+  const modelOptions = useConfiguredImageModels(productRemixModelIds, data.modelId);
   const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
   const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && productRemixModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultProductRemixModelId;
