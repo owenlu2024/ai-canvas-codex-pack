@@ -613,11 +613,7 @@ function findGeneratedOutputPositions(source: Node<CanvasNodeData>, nodes: Node<
 
 function getConnectedGeneratedOutputIds(sourceId: string, nodes: Node<CanvasNodeData>[], edges: Edge[]) {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const ids = new Set(
-    nodes
-      .filter((node) => node.data.generatedBy === sourceId)
-      .map((node) => node.id)
-  );
+  const ids = new Set<string>();
   edges
       .filter((edge) => edge.source === sourceId)
       .map((edge) => nodeById.get(edge.target))
