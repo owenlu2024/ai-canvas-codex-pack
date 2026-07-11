@@ -289,7 +289,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
       />
       <div className="px-[18px] pb-[18px]">{renderContent(id, data)}</div>
       {isImageNode && data.generatedBy && data.modelId ? (
-        <div className="pointer-events-none absolute bottom-[5px] left-[18px] max-w-[284px] truncate text-[8px] font-medium leading-none text-[#A3A9B5]" title={data.modelId}>
+        <div className="pointer-events-none absolute bottom-[5px] left-[18px] right-[18px] truncate text-center text-[8px] font-medium leading-none text-[#A3A9B5]" title={data.modelId}>
           {data.modelId}
         </div>
       ) : null}
