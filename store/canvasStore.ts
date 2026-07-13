@@ -324,42 +324,50 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
     prompt
   };
   if (images.length) input.images = images;
-  const submitResponse = await fetch(submitEndpoint, {
-    body: JSON.stringify({ input, model }),
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    method: "POST",
-    signal: controller.signal
-  });
-  if (!submitResponse.ok) throw new Error(await readDirect12AiError(submitResponse));
-  let taskPayload = await readDirect12AiPayload(submitResponse);
-  const taskId = getDirectTaskId(taskPayload);
-  const submitImages = normalizeDirectImages(taskPayload, expectedCount);
-  if (submitImages.length) return submitImages;
-  if (!taskId) throw new Error("12AI 没有返回任务 ID。");
-
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < hostedImageGenerationMaxWaitMs) {
-    await delay(hostedImageGenerationPollMs, controller.signal);
-    const taskResponse = await fetch(`${v1BaseUrl}/task/${encodeURIComponent(taskId)}`, {
+  const requestOneGeminiImage = async () => {
+    const submitResponse = await fetch(submitEndpoint, {
+      body: JSON.stringify({ input, model }),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json"
       },
-      method: "GET",
+      method: "POST",
       signal: controller.signal
     });
-    if (!taskResponse.ok) throw new Error(await readDirect12AiError(taskResponse));
-    taskPayload = await readDirect12AiPayload(taskResponse);
-    const status = getDirectTaskStatus(taskPayload);
-    const taskImages = normalizeDirectImages(taskPayload, expectedCount);
-    if (taskImages.length && ["", "success", "succeeded", "completed", "done", "partial_completed"].includes(status)) return taskImages;
-    if (["success", "succeeded", "completed", "done"].includes(status) && !taskImages.length) throw new Error("12AI 任务已完成，但没有返回图片。");
-    if (["failed", "error", "cancelled", "canceled"].includes(status)) throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
+    if (!submitResponse.ok) throw new Error(await readDirect12AiError(submitResponse));
+    let taskPayload = await readDirect12AiPayload(submitResponse);
+    const submitImages = normalizeDirectImages(taskPayload, 1);
+    if (submitImages.length) return submitImages[0];
+    const taskId = getDirectTaskId(taskPayload);
+    if (!taskId) throw new Error("12AI 没有返回任务 ID。");
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < hostedImageGenerationMaxWaitMs) {
+      await delay(hostedImageGenerationPollMs, controller.signal);
+      const taskResponse = await fetch(`${v1BaseUrl}/task/${encodeURIComponent(taskId)}`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        method: "GET",
+        signal: controller.signal
+      });
+      if (!taskResponse.ok) throw new Error(await readDirect12AiError(taskResponse));
+      taskPayload = await readDirect12AiPayload(taskResponse);
+      const status = getDirectTaskStatus(taskPayload);
+      const taskImages = normalizeDirectImages(taskPayload, 1);
+      if (taskImages.length && ["", "success", "succeeded", "completed", "done", "partial_completed"].includes(status)) return taskImages[0];
+      if (["success", "succeeded", "completed", "done"].includes(status) && !taskImages.length) throw new Error("12AI 任务已完成，但没有返回图片。");
+      if (["failed", "error", "cancelled", "canceled"].includes(status)) throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
+    }
+    throw new Error("12AI 生成超过 30 分钟仍未返回图片。");
+  };
+
+  const generatedImages: Array<{ url: string }> = [];
+  for (let index = 0; index < expectedCount; index += 1) {
+    generatedImages.push(await requestOneGeminiImage());
   }
-  throw new Error("12AI 生成超过 30 分钟仍未返回图片。");
+  return generatedImages;
 }
 
 async function prepareProxyGeneratedImagesBody(body: Record<string, unknown>) {
@@ -372,7 +380,7 @@ async function prepareProxyGeneratedImagesBody(body: Record<string, unknown>) {
   };
 }
 
-async function requestGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
+async function requestGeneratedImagesOnce(body: Record<string, unknown>, controller: AbortController) {
   const aiSettings = body.aiSettings as ReturnType<typeof getClientAiSettingsPayload>;
   const rawModel = typeof body.model === "string" ? body.model : "";
   const requestBody = {
@@ -440,6 +448,27 @@ async function requestGeneratedImages(body: Record<string, unknown>, controller:
     if (images.length >= expectedCount || (pollResponse.ok && images.length)) return images;
   }
   throw new Error("AI 生成超过 30 分钟仍未返回图片，请稍后重试或检查后台任务状态。");
+}
+
+async function requestGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
+  const params = body.params && typeof body.params === "object" ? body.params as Record<string, string> : {};
+  const requestedCount = getRequestedImageCount(params);
+  if (requestedCount === 1) return requestGeneratedImagesOnce(body, controller);
+
+  const images: Array<{ url: string }> = [];
+  for (let index = 0; index < requestedCount; index += 1) {
+    const result = await requestGeneratedImagesOnce({
+      ...body,
+      params: {
+        ...params,
+        imageCount: "1"
+      }
+    }, controller);
+    const image = result[0];
+    if (!image?.url) throw new Error(`第 ${index + 1} 张图片没有返回结果。`);
+    images.push(image);
+  }
+  return images;
 }
 
 function getNextImageNumber(nodes: Node<CanvasNodeData>[], reserved = new Set<number>()) {
