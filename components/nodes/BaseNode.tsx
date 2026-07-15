@@ -144,22 +144,24 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const isTextImageLayoutNode = data.kind === "textImageLayout";
   const isGridImageNode = data.kind === "gridImage";
   const isSceneImageNode = data.kind === "sceneImage";
+  const isMosquitoSceneImageNode = data.kind === "mosquitoSceneImage";
   const isIndustrialDesignImageNode = data.kind === "industrialDesignImage";
   const isProductRemixNode = data.kind === "productRemix";
-  const isImageGeneratorNode = isGenerateImageNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isIndustrialDesignImageNode || isProductRemixNode;
+  const isImageGeneratorNode = isGenerateImageNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isMosquitoSceneImageNode || isIndustrialDesignImageNode || isProductRemixNode;
   const isAiPromptNode = data.kind === "imageChat";
   const isSceneDirectorNode = data.kind === "sceneDirector";
+  const isMosquitoSceneDirectorNode = data.kind === "mosquitoSceneDirector";
   const isTaobaoPageDirectorNode = data.kind === "taobaoPageDirector";
   const isIndustrialDesignerNode = data.kind === "industrial_designer";
   const isProductPosterNode = data.kind === "product_poster";
   const isVisualDirectorNode = data.kind === "visual_director";
-  const isPromptPlannerNode = isAiPromptNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode;
+  const isPromptPlannerNode = isAiPromptNode || isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode;
   const isImageNode = data.kind === "image";
   const isRunning = data.runState === "running";
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
   const displayTitle = imageNumber ? `Image ${imageNumber}` : data.title;
-  const nodeWidth = isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const nodeWidth = isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
+  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 690 : isIndustrialDesignerNode ? 620 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
 
@@ -231,14 +233,14 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   };
 
   const run = () => {
-    if (isAiPromptNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode) {
+    if (isAiPromptNode || isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode) {
       if (data.runState === "running") {
         stopGenerateImageNode(id);
         return;
       }
       const generationId = `${id}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
       updateNodeData(id, { errorMessage: undefined, generationId, runState: "running" });
-      if (isSceneDirectorNode) void runSceneDirectorNode(id, generationId);
+      if (isSceneDirectorNode || isMosquitoSceneDirectorNode) void runSceneDirectorNode(id, generationId);
       else if (isTaobaoPageDirectorNode) void runTaobaoPageDirectorNode(id, generationId);
       else if (isIndustrialDesignerNode) void runIndustrialDesignerNode(id, generationId);
       else if (isProductPosterNode) void runProductPosterNode(id, generationId);
@@ -292,7 +294,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
             showDownloadImage={isImageNode}
           />
         ) : null}
-        canRun={isAiNode || isImageGeneratorNode || isSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode}
+        canRun={isAiNode || isImageGeneratorNode || isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode}
         onRun={run}
         runState={data.runState}
         title={displayTitle}
@@ -342,6 +344,9 @@ function renderContent(id: string, data: CanvasNodeData) {
   if (data.kind === "sceneImage") {
     return <SceneImagePanel id={id} data={data} />;
   }
+  if (data.kind === "mosquitoSceneImage") {
+    return <SceneImagePanel id={id} data={data} />;
+  }
   if (data.kind === "industrialDesignImage") {
     return <IndustrialDesignImagePanel id={id} data={data} />;
   }
@@ -354,6 +359,9 @@ function renderContent(id: string, data: CanvasNodeData) {
   }
   if (data.kind === "sceneDirector") {
     return <SceneDirectorPanel id={id} data={data} />;
+  }
+  if (data.kind === "mosquitoSceneDirector") {
+    return <MosquitoSceneDirectorPanel id={id} data={data} />;
   }
   if (data.kind === "taobaoPageDirector") {
     return <TaobaoPageDirectorPanel id={id} data={data} />;
@@ -438,6 +446,84 @@ function AiPromptPanel({ id, data }: { id: string; data: CanvasNodeData }) {
         onChange={updateSchemes}
         value={schemes}
       />
+    </div>
+  );
+}
+
+function getMosquitoEffectPresetOptions(method: string) {
+  if (method === "风扇吸入") return ["自动匹配", "无特效", "轻微吸入", "明显吸入", "强力吸入", "原理剖析"];
+  if (method === "电击灭蚊") return ["自动匹配", "无特效", "微小亮点", "轻微电弧", "明显电击", "原理剖析"];
+  if (method === "粘板粘捕") return ["自动匹配", "无特效", "轻度展示", "清晰粘捕", "过程演示", "原理剖析"];
+  return ["自动匹配", "无特效", "轻度展示", "明显展示", "强力广告", "原理剖析"];
+}
+
+function MosquitoSceneDirectorPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const locked = data.runState === "running";
+  const { modelDisplayName, modelId, modelOptions } = usePromptPlannerModel(data);
+  const params = useMemo(() => data.modelParams ?? {}, [data.modelParams]);
+  const backgroundPresence = params.backgroundPresence ?? "自动";
+  const peopleInteractionDisabled = backgroundPresence === "无人物和宠物" || backgroundPresence === "仅宠物";
+  const mosquitoWavelength = params.mosquitoWavelength ?? "395 nm｜标准紫光";
+  const attractionLightDisabled = mosquitoWavelength === "无｜灯光关闭";
+  const mosquitoMethod = params.mosquitoMethod ?? "自动判断";
+  const effectPresetOptions = getMosquitoEffectPresetOptions(mosquitoMethod);
+  const effectPreset = effectPresetOptions.includes(params.effectPreset ?? "") ? params.effectPreset as string : "自动匹配";
+  const nextParams = useMemo(() => ({
+    attractionLight: attractionLightDisabled ? "关闭" : params.attractionLight === "关闭" ? "柔和可见" : params.attractionLight ?? "柔和可见",
+    backgroundPresence,
+    effectPreset,
+    effectStyle: params.effectStyle ?? "舒适商业",
+    insectAmount: params.insectAmount ?? "少量",
+    insectScale: params.insectScale ?? "自动合理",
+    mosquitoMethod,
+    mosquitoSceneMode: "true",
+    mosquitoWavelength,
+    outputLanguage: params.outputLanguage ?? "中文",
+    peopleInteraction: peopleInteractionDisabled ? "无人物互动" : params.peopleInteraction === "无人物互动" ? "自动" : params.peopleInteraction ?? "自动",
+    productLock: "严格",
+    sceneType: params.sceneType ?? "自动",
+    schemes: normalizeBoundedCount(params.schemes, 1, 6, 4),
+    timeMood: params.timeMood === "暗光室内" ? "暗光环境" : params.timeMood ?? "夜晚"
+  }), [attractionLightDisabled, backgroundPresence, effectPreset, mosquitoMethod, mosquitoWavelength, params.attractionLight, params.effectStyle, params.insectAmount, params.insectScale, params.outputLanguage, params.peopleInteraction, params.sceneType, params.schemes, params.timeMood, peopleInteractionDisabled]);
+
+  useEffect(() => {
+    const sameModel = data.modelId === modelId;
+    const sameParams = Object.entries(nextParams).every(([key, value]) => data.modelParams?.[key] === value);
+    if (sameModel && sameParams) return;
+    updateNodeData(id, { modelId, modelParams: { ...params, ...nextParams } });
+  }, [data.modelId, data.modelParams, id, modelId, nextParams, params, updateNodeData]);
+
+  const updateParam = (key: keyof typeof nextParams, value: string) => {
+    if (locked) return;
+    updateNodeData(id, { modelParams: { ...params, ...nextParams, [key]: value } });
+  };
+
+  return (
+    <div className="nodrag nopan nowheel grid gap-4 pt-1">
+      <div className="rounded-[12px] border border-[#D9E1FF] bg-[#F5F7FF] px-4 py-3 text-[12px] font-semibold leading-5 text-[#506095]">
+        用少量、真实微小且不吓人的蚊虫，规划蓝紫诱蚊光、电击、风吸或粘捕效果场景。
+      </div>
+      <GenerateSelect disabled={locked} label="AI 模型" onChange={(value) => updateNodeData(id, { modelId: value })} options={modelOptions} renderValue={modelDisplayName} value={modelId} />
+      <div className="grid grid-cols-2 gap-x-7 gap-y-4">
+        <GenerateSelect disabled={locked} label="灭蚊方式" onChange={(value) => {
+          if (locked) return;
+          updateNodeData(id, { modelParams: { ...params, ...nextParams, mosquitoMethod: value, effectPreset: "自动匹配" } });
+        }} options={["自动判断", "电击灭蚊", "风扇吸入", "粘板粘捕"]} value={nextParams.mosquitoMethod} />
+        <GenerateSelect disabled={locked} label="使用场景" onChange={(value) => updateParam("sceneType", value)} options={["自动", "卧室", "客厅", "庭院", "露营", "餐厅", "商业空间"]} value={nextParams.sceneType} />
+        <GenerateSelect disabled={locked} label="背景主体" onChange={(value) => updateParam("backgroundPresence", value)} options={["自动", "无人物和宠物", "仅人物", "仅宠物", "人物和宠物"]} value={nextParams.backgroundPresence} />
+        <GenerateSelect disabled={locked || peopleInteractionDisabled} label="人物互动" onChange={(value) => updateParam("peopleInteraction", value)} options={peopleInteractionDisabled ? ["无人物互动"] : ["自动", "仅作背景", "手持产品", "操作使用", "拆卸清理", "被蚊虫困扰", "被蚊虫惊扰特效"]} value={nextParams.peopleInteraction} />
+        <GenerateSelect disabled={locked} label="时间氛围" onChange={(value) => updateParam("timeMood", value)} options={["夜晚", "傍晚", "暗光环境", "白天环境", "自动"]} value={nextParams.timeMood} />
+        <GenerateSelect disabled={locked || attractionLightDisabled} label="诱蚊光效" onChange={(value) => updateParam("attractionLight", value)} options={attractionLightDisabled ? ["关闭"] : ["克制", "柔和可见", "明显可见"]} value={nextParams.attractionLight} />
+        <GenerateSelect disabled={locked} label="诱蚊波长" onChange={(value) => updateParam("mosquitoWavelength", value)} options={["无｜灯光关闭", "365 nm｜近紫外深紫", "395 nm｜标准紫光", "410 nm｜蓝紫光"]} value={nextParams.mosquitoWavelength} />
+        <GenerateSelect disabled={locked} label="蚊虫数量" onChange={(value) => updateParam("insectAmount", value)} options={["极少", "少量", "适量", "大量"]} value={nextParams.insectAmount} />
+        <GenerateSelect disabled={locked} label="效果风格" onChange={(value) => updateParam("effectStyle", value)} options={["舒适商业", "科技演示", "原理可视化"]} value={nextParams.effectStyle} />
+        <GenerateSelect disabled={locked} label="蚊虫尺度" onChange={(value) => updateParam("insectScale", value)} options={["自动合理", "真实微小", "细节适度放大", "原理示意放大"]} value={nextParams.insectScale} />
+        <GenerateNumberInput disabled={locked} label="方案数量" max={6} min={1} onChange={(value) => updateParam("schemes", value)} value={nextParams.schemes} />
+        <GenerateSelect disabled={locked} label="输出语言" onChange={(value) => updateParam("outputLanguage", value)} options={["中文", "英文", "中英双语"]} value={nextParams.outputLanguage} />
+        <GenerateSelect disabled label="产品锁定" onChange={() => undefined} options={["严格"]} value={nextParams.productLock} />
+        <GenerateSelect disabled={locked} label="功能特效" onChange={(value) => updateParam("effectPreset", value)} options={effectPresetOptions} value={nextParams.effectPreset} />
+      </div>
     </div>
   );
 }
@@ -1627,6 +1713,7 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
   const spec = getSceneImageModelSpec(modelId);
   const params = { ...getDefaultSceneImageParams(modelId), ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
+  const isMosquitoMode = data.kind === "mosquitoSceneImage";
   const gridEnabled = params.gridEnabled === "true";
   const aspectRatioOptions = [
     "自动",
@@ -1674,6 +1761,11 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
 
   return (
     <div className="nodrag nopan nowheel grid gap-2">
+      {isMosquitoMode ? (
+        <div className="rounded-[12px] border border-[#D9E1FF] bg-[#F5F7FF] px-3 py-2 text-[12px] font-semibold leading-5 text-[#506095]">
+          严格执行 Prompt 明确要求的内容；未要求时不自动添加人物、宠物或蚊虫。
+        </div>
+      ) : null}
       <GenerateSelect
         disabled={locked}
         label="模型"

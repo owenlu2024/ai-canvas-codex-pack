@@ -1,4 +1,4 @@
-export type NodeKind = "image" | "prompt" | "imageChat" | "sceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "industrialDesignImage" | "productRemix" | "group";
+export type NodeKind = "image" | "prompt" | "imageChat" | "sceneDirector" | "mosquitoSceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "mosquitoSceneImage" | "industrialDesignImage" | "productRemix" | "group";
 export type PortType = "image" | "text";
 export type PortDirection = "input" | "output";
 export type RunState = "idle" | "running" | "completed" | "failed";
@@ -49,6 +49,11 @@ export const portsByNode: Record<NodeKind, Port[]> = {
     { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
   ],
   sceneDirector: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
+  ],
+  mosquitoSceneDirector: [
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
@@ -113,6 +118,11 @@ export const portsByNode: Record<NodeKind, Port[]> = {
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
   ],
+  mosquitoSceneImage: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
+  ],
   industrialDesignImage: [
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
@@ -131,6 +141,7 @@ export const nodeLabels: Record<NodeKind, string> = {
   prompt: "Prompt",
   imageChat: "AI Prompt",
   sceneDirector: "Scene Director",
+  mosquitoSceneDirector: "灭蚊场景导演",
   taobaoPageDirector: "Taobao Page Director",
   industrial_designer: "Industrial Designer",
   product_poster: "产品海报导演",
@@ -143,6 +154,7 @@ export const nodeLabels: Record<NodeKind, string> = {
   textImageLayout: "Text Image Layout",
   gridImage: "Generate Grid Image",
   sceneImage: "Scene Image",
+  mosquitoSceneImage: "灭蚊场景图",
   industrialDesignImage: "ID Image",
   productRemix: "产品 Remix 合成器",
   group: "Group"

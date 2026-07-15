@@ -87,6 +87,16 @@ const categories: AddNodeCategory[] = [
       { kind: "visual_director", label: "Visual Director", description: "视觉规范师" },
       { kind: "textImageLayout", label: "Text Image Layout", description: "图文混排成图" }
     ]
+  },
+  {
+    id: "dayang",
+    title: "大央科技",
+    skillOptions: [
+      { kind: "mosquitoSceneDirector", label: "灭蚊场景导演", description: "灭蚊产品特效场景 Prompt" }
+    ],
+    imageOptions: [
+      { kind: "mosquitoSceneImage", label: "灭蚊场景图", description: "严格执行灭蚊场景 Prompt" }
+    ]
   }
 ];
 
@@ -230,7 +240,7 @@ export function AddNodePopover({ toCanvasPosition }: { toCanvasPosition: (point:
         </section>
         <section className="min-h-[204px] rounded-[12px] border border-line bg-[#FBFCFE] p-3">
           <div className="mb-3 rounded-[12px] border border-[#E7ECF4] bg-[#F4F7FB] p-1">
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-6 gap-1">
               {categories.map((category) => {
                 const active = category.id === activeCategory.id;
                 return (

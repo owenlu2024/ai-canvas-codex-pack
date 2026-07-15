@@ -47,6 +47,7 @@ const nodeTypes = {
   prompt: PromptNode,
   imageChat: ImageChatNode,
   sceneDirector: ImageChatNode,
+  mosquitoSceneDirector: ImageChatNode,
   taobaoPageDirector: ImageChatNode,
   industrial_designer: ImageChatNode,
   product_poster: ImageChatNode,
@@ -59,6 +60,7 @@ const nodeTypes = {
   textImageLayout: MultiGenerateNode,
   gridImage: MultiGenerateNode,
   sceneImage: MultiGenerateNode,
+  mosquitoSceneImage: MultiGenerateNode,
   industrialDesignImage: MultiGenerateNode,
   productRemix: MultiGenerateNode,
   groupFrame: ImageNode
@@ -280,7 +282,7 @@ function sanitizePromptRichHtml(value: string) {
 }
 
 function isRunningLockingNode(node?: Node<CanvasNodeData>) {
-  return (node?.data.kind === "generateImage" || node?.data.kind === "hdRedraw" || node?.data.kind === "hdRedraw2" || node?.data.kind === "rhinoTest" || node?.data.kind === "textImageLayout" || node?.data.kind === "gridImage" || node?.data.kind === "sceneImage" || node?.data.kind === "industrialDesignImage" || node?.data.kind === "productRemix" || node?.data.kind === "imageChat" || node?.data.kind === "sceneDirector" || node?.data.kind === "taobaoPageDirector" || node?.data.kind === "industrial_designer" || node?.data.kind === "product_poster" || node?.data.kind === "visual_director") && node.data.runState === "running";
+  return (node?.data.kind === "generateImage" || node?.data.kind === "hdRedraw" || node?.data.kind === "hdRedraw2" || node?.data.kind === "rhinoTest" || node?.data.kind === "textImageLayout" || node?.data.kind === "gridImage" || node?.data.kind === "sceneImage" || node?.data.kind === "mosquitoSceneImage" || node?.data.kind === "industrialDesignImage" || node?.data.kind === "productRemix" || node?.data.kind === "imageChat" || node?.data.kind === "sceneDirector" || node?.data.kind === "mosquitoSceneDirector" || node?.data.kind === "taobaoPageDirector" || node?.data.kind === "industrial_designer" || node?.data.kind === "product_poster" || node?.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function connectionTouchesRunningLockingNode(connection: Pick<Connection, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
