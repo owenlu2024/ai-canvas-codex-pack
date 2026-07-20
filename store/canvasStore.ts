@@ -55,7 +55,7 @@ function makeNode(id: string, kind: NodeKind, position: XYPosition, zIndex: numb
 }
 
 function isRunningLockingNode(node: Node<CanvasNodeData>) {
-  return (node.data.kind === "generateImage" || node.data.kind === "imageTextEditor" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
+  return (node.data.kind === "generateImage" || node.data.kind === "imageTextEditor" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function edgeTouchesRunningLockingNode(edge: Pick<Edge, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
@@ -572,8 +572,8 @@ function makeCopiedNodes(
 function getNodeSize(node: Node<CanvasNodeData>) {
   const isIndustrialAiPrompt = node.data.kind === "imageChat" && node.data.modelParams?.module === "Industrial Design";
   return {
-    height: Number(node.data.height ?? (node.data.kind === "product_poster" ? 720 : node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "mosquitoSceneDirector" ? 690 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" ? 430 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "mosquitoSceneImage" ? 440 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
-    width: Number(node.data.width ?? (node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
+    height: Number(node.data.height ?? (node.data.kind === "product_poster" ? 720 : node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "mosquitoSceneDirector" ? 690 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "productRetouch" ? 620 : node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" ? 430 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "mosquitoSceneImage" ? 440 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
+    width: Number(node.data.width ?? (node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
   };
 }
 
@@ -1021,7 +1021,7 @@ async function prepareGenerationReferenceImageUrls(imageUrls: string[]) {
 function getImageRoleFromPrompt(prompt: string, imageNumber: number) {
   const imageToken = String(imageNumber).padStart(3, "0");
   const escapedToken = imageToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const mentionPattern = new RegExp(`(?:<\\s*Image\\s*${escapedToken}\\s*>|@\\s*(?:Image\\s*)?0*${imageNumber}\\b)`, "i");
+  const mentionPattern = new RegExp(`(?:<\\s*Image\\s*${escapedToken}\\s*>|@\\s*(?:Image\\s*)?0*${imageNumber}\\b|\\bImage\\s*0*${imageNumber}\\b)`, "i");
   const explicitStyleLabels = getStyleReferenceLabelsFromPrompt(prompt);
   const matchedLines = prompt.split(/\r?\n/).filter((line) => mentionPattern.test(line));
   const matchedLine = matchedLines[0] ?? "";
@@ -1456,6 +1456,62 @@ function buildSceneImagePrompt(promptNodes: Node<CanvasNodeData>[], gridEnabled:
   }
   if (gridEnabled) return buildSceneGridImagePrompt(promptNodes);
   return buildScenePanelPrompt(prompt);
+}
+
+function compactConnectedPromptOnly(prompt: string, budget: number) {
+  const trimmed = prompt.trim();
+  if (trimmed.length <= budget) return trimmed;
+  const marker = "\n\n[Only repeated middle content from the connected user Prompt was compacted for the provider limit.]\n\n";
+  const retained = Math.max(0, budget - marker.length);
+  const headLength = Math.ceil(retained * 0.7);
+  const tailLength = Math.max(0, retained - headLength);
+  return `${trimmed.slice(0, headLength)}${marker}${trimmed.slice(-tailLength)}`;
+}
+
+function buildProductRetouchPrompt(userPrompt: string, params: Record<string, string>, modelId?: string) {
+  const wavelength = params.mosquitoWavelength ?? "395 nm｜标准紫光";
+  const lightOff = wavelength === "无｜灯光关闭";
+  const wavelengthRule = lightOff
+    ? "ATTRACTION LIGHT OFF: the real attraction lamp/light chamber emits zero violet or blue-violet light. Add no product-originated purple glow, bloom, spill, reflection, or illuminated strip."
+    : `ATTRACTION LIGHT PRINCIPLE: selected wavelength is ${wavelength}. Only the product's real existing attraction-light panel, lamp chamber, or emitter visible in the Main Product may emit light. Keep the selected hue consistent across the emitter, nearby product reflections, background spill, and contact surface. Never invent an LED strip, extra lamp, glowing border, fantasy energy, laser beam, or room-filling purple wash. Studio lighting remains physically independent from the functional attraction light.`;
+  const fixedBefore = [
+    "DAYANG MOSQUITO-LAMP PRODUCT RETOUCH — STRICT IMAGE EDITING.",
+    "REFERENCE ROLE PRIORITY: the connected user Prompt is the highest authority for assigning each <Image###> role. The Main Product image is the only product identity source. Every other image is background, gradient, color, studio-lighting, shadow, surface, or mood reference only according to the Prompt.",
+    "PRODUCT IMMUTABILITY LOCK: preserve the exact same product identity, exterior design, silhouette, geometry, dimensions, proportions, camera angle, yaw, pitch, roll, perspective, visible-face ratios, crop relationship, color blocks, materials, texture layout, logo, printed text, markings, buttons, openings, vents, mesh, attraction-light panel, glue board, plug, socket-facing geometry, seams, edges, thicknesses, and every visible component.",
+    "Do not rotate, mirror, tilt, straighten, front-face, side-face, redraw, remodel, beautify, simplify, replace, recolor, relabel, add, delete, merge, move, resize, or reinterpret any product part. Adapt the background, ground plane, crop, shadows, and studio lighting around the fixed product projection.",
+    "ALLOWED RETOUCH ONLY: change the surrounding background; refine illumination falling onto the existing product; adjust physically caused exposure, highlight, reflection, contrast, white balance, color spill, contact shadow, cast shadow, ambient occlusion, and edge integration. Lighting may reveal existing materials but must not change their identity, base color, finish, graphics, or geometry.",
+    "REFERENCE ISOLATION: never copy a product, person, text, logo, package, prop, or foreground object from any background/lighting reference. Extract only the exact visual attributes assigned by the user Prompt, such as background color, gradient direction, brightness, seamless sweep, surface, main-light direction, softbox character, rim light, highlight shape, shadow direction, softness, and atmosphere.",
+    "ONE-PRODUCT LOCK: render exactly one Main Product. No duplicate, alternate pose, detached copy, reflected duplicate, packaging copy, poster copy, screen copy, or background product.",
+    "EDGE AND GROUNDING LOCK: no white cutout halo, gray fringe, glue-like rim, transparent border, raised gel edge, pasted edge, jagged mask, floating gap, or invented pedestal. Preserve clean real edges and ground the product with physically correct contact shadow and ambient occlusion unless the original product is explicitly suspended.",
+    "Do not add mosquitoes, dead insects, trajectories, electric arcs, suction graphics, mechanism diagrams, people, hands, pets, promotional text, captions, badges, or watermarks unless the connected Prompt explicitly requires them.",
+    wavelengthRule,
+    `NODE RETOUCH SETTINGS: Background = ${params.backgroundMode ?? "按 Prompt / 参考图"}; Studio lighting = ${params.studioLighting ?? "高调柔光"}; Shadow strength = ${params.shadowStrength ?? "柔和"}; Highlight control = ${params.highlightControl ?? "柔和"}; Color temperature = ${params.colorTemperature ?? "中性"}. The connected Prompt overrides these choices when it explicitly states a different background or lighting requirement.`,
+    "CONNECTED USER PROMPT — preserve its image-role definitions and execute its explicit background and lighting requirements:"
+  ].join("\n\n");
+  const fixedAfter = [
+    "FINAL VERIFICATION: compare the result against the Main Product image before returning it. Reject and correct any change in product structure, angle, perspective, visible faces, proportions, materials, base colors, parts, labels, logo, light-panel position, glue-board position, plug geometry, or feature layout.",
+    "Verify that background and lighting references influenced only their assigned attributes, the selected attraction-light principle is physically correct, studio lighting is independent, exactly one unchanged product remains, and there is no halo, glue edge, floating gap, duplicate, invented light source, or unrequested insect/effect.",
+    "Return only the finished commercial product retouch image."
+  ].join("\n\n");
+  if (getBaseModelId(modelId) !== "gpt-image-2") return `${fixedBefore}\n\n${userPrompt.trim()}\n\n${fixedAfter}`;
+  const maxPromptLength = 27500;
+  const connectedBudget = Math.max(0, maxPromptLength - fixedBefore.length - fixedAfter.length - 4);
+  return `${fixedBefore}\n\n${compactConnectedPromptOnly(userPrompt, connectedBudget)}\n\n${fixedAfter}`;
+}
+
+function buildProductRetouchReferenceManifest(referenceImages: Node<CanvasNodeData>[], rolePrompt: string) {
+  return [
+    "PRODUCT RETOUCH ATTACHMENT MAP — mandatory:",
+    ...referenceImages.map((node, index) => {
+      const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : index + 1;
+      const label = `<Image${String(imageNumber).padStart(3, "0")}>`;
+      const role = referenceImages.length === 1 ? "main" : getImageRoleFromPrompt(rolePrompt, imageNumber);
+      return role === "main"
+        ? `- Attached image ${index + 1} = ${label}: MAIN PRODUCT. This is the exact immutable mosquito-lamp product asset and the only source for product appearance, structure, angle, perspective, materials, colors, markings, and components.`
+        : `- Attached image ${index + 1} = ${label}: REFERENCE ONLY. Follow the precise role assigned in the connected Prompt. Use only its background, gradient, color, studio-lighting, shadow, surface, or mood attributes; ignore and never copy any product, person, text, logo, packaging, or foreground object.`;
+    }),
+    "When the connected Prompt assigns a role, that assignment overrides attachment order and all automatic assumptions. No reference image may alter or replace the Main Product."
+  ].join("\n");
 }
 
 function buildMosquitoSceneContentRules() {
@@ -2134,11 +2190,11 @@ function isGenerateImageOutput(node: Node<CanvasNodeData>, selectedById: Map<str
   if (node.data.kind !== "image") return false;
   if (typeof node.data.generatedBy === "string") {
     const sourceKind = selectedById.get(node.data.generatedBy)?.data.kind;
-    if (sourceKind === "generateImage" || sourceKind === "hdRedraw" || sourceKind === "hdRedraw2" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "mosquitoSceneImage" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix") return true;
+    if (sourceKind === "generateImage" || sourceKind === "hdRedraw" || sourceKind === "hdRedraw2" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "mosquitoSceneImage" || sourceKind === "productRetouch" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix") return true;
   }
   return edges.some((edge) => {
     const sourceKind = selectedById.get(edge.source)?.data.kind;
-    return edge.target === node.id && (sourceKind === "generateImage" || sourceKind === "hdRedraw" || sourceKind === "hdRedraw2" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "mosquitoSceneImage" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix" || sourceKind === "visual_director");
+    return edge.target === node.id && (sourceKind === "generateImage" || sourceKind === "hdRedraw" || sourceKind === "hdRedraw2" || sourceKind === "rhinoTest" || sourceKind === "textImageLayout" || sourceKind === "gridImage" || sourceKind === "sceneImage" || sourceKind === "mosquitoSceneImage" || sourceKind === "productRetouch" || sourceKind === "industrialDesignImage" || sourceKind === "productRemix" || sourceKind === "visual_director");
   });
 }
 
@@ -2171,7 +2227,7 @@ function getWorkflowColumns(selectedNodes: Node<CanvasNodeData>[], edges: Edge[]
       aiPrompts.push(node);
       return;
     }
-    if (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "visual_director") {
+    if (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "visual_director") {
       generators.push(node);
       return;
     }
@@ -2192,7 +2248,7 @@ function getWorkflowColumns(selectedNodes: Node<CanvasNodeData>[], edges: Edge[]
       }) ||
         [...outgoingIds].some((id) => {
           const targetKind = selectedById.get(id)?.data.kind;
-          return targetKind === "generateImage" || targetKind === "hdRedraw" || targetKind === "hdRedraw2" || targetKind === "rhinoTest" || targetKind === "textImageLayout" || targetKind === "gridImage" || targetKind === "sceneImage" || targetKind === "mosquitoSceneImage" || targetKind === "industrialDesignImage" || targetKind === "productRemix";
+          return targetKind === "generateImage" || targetKind === "hdRedraw" || targetKind === "hdRedraw2" || targetKind === "rhinoTest" || targetKind === "textImageLayout" || targetKind === "gridImage" || targetKind === "sceneImage" || targetKind === "mosquitoSceneImage" || targetKind === "productRetouch" || targetKind === "industrialDesignImage" || targetKind === "productRemix";
         });
       if (isSchemePrompt) schemePrompts.push(node);
       else userPrompts.push(node);
@@ -2309,7 +2365,7 @@ function normalizeHydratedNodes(nodes: Node<CanvasNodeData>[]) {
       ...nodeWithCurrentTitle,
       data: {
         ...nodeWithCurrentTitle.data,
-        errorMessage: nodeWithCurrentTitle.data.kind === "generateImage" || nodeWithCurrentTitle.data.kind === "hdRedraw" || nodeWithCurrentTitle.data.kind === "hdRedraw2" || nodeWithCurrentTitle.data.kind === "rhinoTest" || nodeWithCurrentTitle.data.kind === "textImageLayout" || nodeWithCurrentTitle.data.kind === "gridImage" || nodeWithCurrentTitle.data.kind === "sceneImage" || nodeWithCurrentTitle.data.kind === "mosquitoSceneImage" || nodeWithCurrentTitle.data.kind === "industrialDesignImage" || nodeWithCurrentTitle.data.kind === "productRemix" || nodeWithCurrentTitle.data.kind === "imageChat" || nodeWithCurrentTitle.data.kind === "sceneDirector" || nodeWithCurrentTitle.data.kind === "mosquitoSceneDirector" || nodeWithCurrentTitle.data.kind === "taobaoPageDirector" || nodeWithCurrentTitle.data.kind === "industrial_designer" || nodeWithCurrentTitle.data.kind === "product_poster" || nodeWithCurrentTitle.data.kind === "visual_director" ? "上次生成请求已中断，请重新 Run。" : nodeWithCurrentTitle.data.errorMessage,
+        errorMessage: nodeWithCurrentTitle.data.kind === "generateImage" || nodeWithCurrentTitle.data.kind === "hdRedraw" || nodeWithCurrentTitle.data.kind === "hdRedraw2" || nodeWithCurrentTitle.data.kind === "rhinoTest" || nodeWithCurrentTitle.data.kind === "textImageLayout" || nodeWithCurrentTitle.data.kind === "gridImage" || nodeWithCurrentTitle.data.kind === "sceneImage" || nodeWithCurrentTitle.data.kind === "mosquitoSceneImage" || nodeWithCurrentTitle.data.kind === "productRetouch" || nodeWithCurrentTitle.data.kind === "industrialDesignImage" || nodeWithCurrentTitle.data.kind === "productRemix" || nodeWithCurrentTitle.data.kind === "imageChat" || nodeWithCurrentTitle.data.kind === "sceneDirector" || nodeWithCurrentTitle.data.kind === "mosquitoSceneDirector" || nodeWithCurrentTitle.data.kind === "taobaoPageDirector" || nodeWithCurrentTitle.data.kind === "industrial_designer" || nodeWithCurrentTitle.data.kind === "product_poster" || nodeWithCurrentTitle.data.kind === "visual_director" ? "上次生成请求已中断，请重新 Run。" : nodeWithCurrentTitle.data.errorMessage,
         generationId: undefined,
         runState: "failed" as const
       }
@@ -2723,6 +2779,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
             ? { modelId: defaultGridImageModel, modelParams: { aspectRatio: "Auto", imageCount: "1", resolution: "Auto" }, ...data }
           : kind === "sceneImage" || kind === "mosquitoSceneImage"
             ? { modelId: defaultSceneImageModelId, modelParams: getDefaultSceneImageParams(defaultSceneImageModelId), ...data }
+            : kind === "productRetouch"
+              ? { modelId: defaultSceneImageModelId, modelParams: { ...getDefaultSceneImageParams(defaultSceneImageModelId), backgroundMode: "按 Prompt / 参考图", colorTemperature: "中性", highlightControl: "柔和", imageCount: "1", mosquitoWavelength: "395 nm｜标准紫光", productLock: "严格", shadowStrength: "柔和", studioLighting: "高调柔光" }, ...data }
             : kind === "industrialDesignImage"
               ? { modelId: defaultIndustrialDesignImageModelId, modelParams: getDefaultIndustrialDesignImageParams(defaultIndustrialDesignImageModelId), ...data }
               : kind === "productRemix"
@@ -2763,6 +2821,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const isGridImageNode = source.data.kind === "gridImage";
     const isSceneImageNode = source.data.kind === "sceneImage";
     const isMosquitoSceneImageNode = source.data.kind === "mosquitoSceneImage";
+    const isProductRetouchNode = source.data.kind === "productRetouch";
     const isIndustrialDesignImageNode = source.data.kind === "industrialDesignImage";
     const isProductRemixNode = source.data.kind === "productRemix";
     if (isImageTextEditorNode) {
@@ -2866,6 +2925,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ? buildSceneImagePrompt(promptNodes, sceneGridEnabled)
         : isMosquitoSceneImageNode
           ? buildMosquitoSceneImagePrompt(promptNodes, sceneGridEnabled)
+        : isProductRetouchNode
+          ? buildProductRetouchPrompt(rolePrompt, source.data.modelParams ?? {}, source.data.modelId)
         : isIndustrialDesignImageNode
           ? buildIndustrialDesignImagePrompt(promptNodes, industrialDesignGridEnabled)
           : isGridImageNode || generateGridEnabled
@@ -3243,6 +3304,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ? buildSceneImagePrompt(promptNodes, sceneGridEnabled)
         : isMosquitoSceneImageNode
           ? buildMosquitoSceneImagePrompt(promptNodes, sceneGridEnabled)
+        : isProductRetouchNode
+          ? buildProductRetouchPrompt(rolePrompt, source.data.modelParams ?? {}, source.data.modelId)
         : isIndustrialDesignImageNode
           ? buildIndustrialDesignImagePrompt(promptNodes, industrialDesignGridEnabled)
           : isGridImageNode || generateGridEnabled
@@ -3267,6 +3330,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (isProductRemixNode && !allReferenceImages.length) {
       set((state) => ({
         nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "请在 Prompt 里用 @Image 010 这类编号明确指定产品图片。", generationId: undefined, runState: "failed" as const } } : node))
+      }));
+      return;
+    }
+    if (isProductRetouchNode && !allReferenceImages.length) {
+      set((state) => ({
+        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "精修图至少需要连接 1 张主产品图片。", generationId: undefined, runState: "failed" as const } } : node))
+      }));
+      return;
+    }
+    const retouchHasMainProduct = allReferenceImages.some((node) => {
+      const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : Number.NaN;
+      return Number.isFinite(imageNumber) && getImageRoleFromPrompt(rolePrompt, imageNumber) === "main";
+    });
+    if (isProductRetouchNode && allReferenceImages.length > 1 && !retouchHasMainProduct) {
+      set((state) => ({
+        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "连接多张图片时，请在前置 Prompt 明确主产品，例如：Image 001 是主产品图；Image 002 是背景参考图。", generationId: undefined, runState: "failed" as const } } : node))
       }));
       return;
     }
@@ -3366,6 +3445,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ? buildTextImageLayoutReferenceManifest(referenceImages, rolePrompt, textLayoutStyleReferenceImages, textLayoutStyleSummary)
       : isSceneImageNode || isMosquitoSceneImageNode
         ? buildReferenceAttachmentManifest(referenceImages, rolePrompt, preparedReferenceImages.omitted)
+        : isProductRetouchNode
+          ? buildProductRetouchReferenceManifest(referenceImages, rolePrompt)
         : isIndustrialDesignImageNode
           ? buildIndustrialDesignReferenceManifest(referenceImages, rolePrompt)
           : isRhinoTestNode
@@ -3374,6 +3455,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               ? buildGenerateImageReferenceManifest(referenceImages)
           : "";
     const requestPrompt = referenceManifest ? `${referenceManifest}\n\n${prompt}` : prompt;
+    if (isProductRetouchNode && getBaseModelId(modelId) === "gpt-image-2" && requestPrompt.length > 31800) {
+      set((state) => ({
+        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "当前 Prompt 超过 gpt-image-2 的长度限制。系统已完整保留精修预设规则，请精简前置 Prompt 后重新运行。", generationId: undefined, runState: "failed" as const } } : node))
+      }));
+      return;
+    }
     const promptResolution = isTextImageLayoutNode ? parsePromptResolution(rolePrompt) : null;
     const baseRequestParams = isProductRemixNode
       ? { ...(source.data.modelParams ?? {}), imageCount: "1" }
@@ -3475,6 +3562,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const isTextImageLayoutOutput = source.data.kind === "textImageLayout";
       const isSceneImageOutput = source.data.kind === "sceneImage";
       const isMosquitoSceneImageOutput = source.data.kind === "mosquitoSceneImage";
+      const isProductRetouchOutput = source.data.kind === "productRetouch";
       const isIndustrialDesignImageOutput = source.data.kind === "industrialDesignImage";
       const isProductRemixOutput = source.data.kind === "productRemix";
       const generateGridOutput = isGenerateImageOutput && source.data.modelParams?.gridEnabled === "true";
@@ -3496,6 +3584,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ? "Scene Image"
         : isMosquitoSceneImageOutput
           ? "灭蚊场景图"
+        : isProductRetouchOutput
+          ? "精修图"
         : isIndustrialDesignImageOutput
           ? "ID Image"
         : isRhinoTestOutput
@@ -3538,6 +3628,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           ? buildSceneImagePrompt(promptNodes, source.data.modelParams?.gridEnabled === "true")
           : source.data.kind === "mosquitoSceneImage"
             ? buildMosquitoSceneImagePrompt(promptNodes, source.data.modelParams?.gridEnabled === "true")
+          : source.data.kind === "productRetouch"
+            ? buildProductRetouchPrompt(outputRolePrompt, source.data.modelParams ?? {}, source.data.modelId)
           : source.data.kind === "industrialDesignImage"
             ? buildIndustrialDesignImagePrompt(promptNodes, source.data.modelParams?.gridEnabled === "true")
           : source.data.kind === "productRemix"
@@ -3561,6 +3653,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               ? source.data.modelParams?.gridEnabled === "true" ? `Scene Grid Image ${String(Math.min(10, promptNodes.length)).padStart(2, "0")}` : "Scene Image"
               : source.data.kind === "mosquitoSceneImage"
                 ? source.data.modelParams?.gridEnabled === "true" ? `灭蚊场景宫图 ${String(Math.min(10, promptNodes.length)).padStart(2, "0")}` : "灭蚊场景图"
+              : source.data.kind === "productRetouch"
+                ? "精修图"
               : source.data.kind === "industrialDesignImage"
                 ? source.data.modelParams?.gridEnabled === "true" ? `ID Grid Image ${String(Math.min(10, promptNodes.length)).padStart(2, "0")}` : "ID Image"
               : source.data.kind === "productRemix"
@@ -4588,9 +4682,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => {
       const selectedNodes = state.nodes.filter((node) => node.selected && node.data.kind !== "group");
       if (selectedNodes.length < 2) return state;
-      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
+      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
 
-      const useWorkflowLayout = selectedNodes.some((node) => node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix");
+      const useWorkflowLayout = selectedNodes.some((node) => node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix");
       const positions = useWorkflowLayout
         ? layoutColumns(selectedNodes, getWorkflowColumns(selectedNodes, state.edges))
         : layoutGrid(selectedNodes);

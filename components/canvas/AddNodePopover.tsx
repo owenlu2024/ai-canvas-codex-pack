@@ -96,6 +96,7 @@ const categories: AddNodeCategory[] = [
       { kind: "mosquitoSceneDirector", label: "灭蚊场景导演", description: "灭蚊产品特效场景 Prompt" }
     ],
     imageOptions: [
+      { kind: "productRetouch", label: "精修图", description: "灭蚊灯产品背景与灯光精修" },
       { kind: "mosquitoSceneImage", label: "灭蚊场景图", description: "严格执行灭蚊场景 Prompt" }
     ]
   }

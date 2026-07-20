@@ -1,4 +1,4 @@
-export type NodeKind = "image" | "prompt" | "imageChat" | "sceneDirector" | "mosquitoSceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "imageTextEditor" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "mosquitoSceneImage" | "industrialDesignImage" | "productRemix" | "group";
+export type NodeKind = "image" | "prompt" | "imageChat" | "sceneDirector" | "mosquitoSceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "imageTextEditor" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "mosquitoSceneImage" | "productRetouch" | "industrialDesignImage" | "productRemix" | "group";
 export type PortType = "image" | "text";
 export type PortDirection = "input" | "output";
 export type RunState = "idle" | "running" | "completed" | "failed";
@@ -127,6 +127,11 @@ export const portsByNode: Record<NodeKind, Port[]> = {
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
   ],
+  productRetouch: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
+  ],
   industrialDesignImage: [
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
@@ -160,6 +165,7 @@ export const nodeLabels: Record<NodeKind, string> = {
   gridImage: "Generate Grid Image",
   sceneImage: "Scene Image",
   mosquitoSceneImage: "灭蚊场景图",
+  productRetouch: "精修图",
   industrialDesignImage: "ID Image",
   productRemix: "产品 Remix 合成器",
   group: "Group"

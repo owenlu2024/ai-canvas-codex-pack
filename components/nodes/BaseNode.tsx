@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Pencil } from "lucide-react";
+import { Check, ChevronDown, Pencil } from "lucide-react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { getBaseModelId, getClientAiSettingsPayload, readClientAiSettings } from "@/lib/clientAiSettings";
 import { getImageDisplayUrl } from "@/lib/imageDisplayUrl";
@@ -146,9 +146,10 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const isGridImageNode = data.kind === "gridImage";
   const isSceneImageNode = data.kind === "sceneImage";
   const isMosquitoSceneImageNode = data.kind === "mosquitoSceneImage";
+  const isProductRetouchNode = data.kind === "productRetouch";
   const isIndustrialDesignImageNode = data.kind === "industrialDesignImage";
   const isProductRemixNode = data.kind === "productRemix";
-  const isImageGeneratorNode = isGenerateImageNode || isImageTextEditorNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isMosquitoSceneImageNode || isIndustrialDesignImageNode || isProductRemixNode;
+  const isImageGeneratorNode = isGenerateImageNode || isImageTextEditorNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isMosquitoSceneImageNode || isProductRetouchNode || isIndustrialDesignImageNode || isProductRemixNode;
   const isAiPromptNode = data.kind === "imageChat";
   const isSceneDirectorNode = data.kind === "sceneDirector";
   const isMosquitoSceneDirectorNode = data.kind === "mosquitoSceneDirector";
@@ -162,7 +163,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
   const displayTitle = imageNumber ? `Image ${imageNumber}` : data.title;
   const nodeWidth = isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageTextEditorNode ? 480 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 690 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 690 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isProductRetouchNode ? 620 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
 
@@ -350,6 +351,9 @@ function renderContent(id: string, data: CanvasNodeData) {
   }
   if (data.kind === "mosquitoSceneImage") {
     return <SceneImagePanel id={id} data={data} />;
+  }
+  if (data.kind === "productRetouch") {
+    return <ProductRetouchPanel id={id} data={data} />;
   }
   if (data.kind === "industrialDesignImage") {
     return <IndustrialDesignImagePanel id={id} data={data} />;
@@ -1949,6 +1953,71 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
   );
 }
 
+function ProductRetouchPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const modelOptions = useConfiguredImageModels(sceneImageModelIds, data.modelId);
+  const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
+  const hasKnownModel = typeof data.modelId === "string" && modelOptions.includes(data.modelId) && sceneImageModelSpecs.some((model) => model.id === getBaseModelId(data.modelId));
+  const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultSceneImageModelId;
+  const spec = getSceneImageModelSpec(modelId);
+  const params = useMemo<Record<string, string>>(() => ({
+    ...getDefaultSceneImageParams(modelId),
+    backgroundMode: "按 Prompt / 参考图",
+    colorTemperature: "中性",
+    highlightControl: "柔和",
+    imageCount: "1",
+    mosquitoWavelength: "395 nm｜标准紫光",
+    productLock: "严格",
+    shadowStrength: "柔和",
+    studioLighting: "高调柔光",
+    ...(data.modelParams ?? {})
+  }), [data.modelParams, modelId]);
+  const locked = data.runState === "running";
+  const aspectRatioOptions = ["自动", "1:1 方图", "2:3 竖图", "3:2 横图", "3:4 竖图", "4:3 横图", "4:5 竖图", "5:4 横图", "9:16 手机竖图", "16:9 宽屏"];
+
+  useEffect(() => {
+    if (data.modelId && data.modelId === modelId && data.modelParams) return;
+    updateNodeData(id, { modelId, modelParams: params });
+  }, [data.modelId, data.modelParams, id, modelId, params, updateNodeData]);
+
+  const updateModel = (nextModelId: string) => {
+    if (locked) return;
+    updateNodeData(id, {
+      modelId: nextModelId,
+      modelParams: {
+        ...params,
+        ...getDefaultSceneImageParams(nextModelId),
+        imageCount: params.imageCount ?? "1"
+      }
+    });
+  };
+  const updateParam = (key: string, value: string) => {
+    if (locked) return;
+    updateNodeData(id, { modelParams: { ...params, [key]: value } });
+  };
+
+  return (
+    <div className="nodrag nopan nowheel grid gap-2">
+      <div className="rounded-[12px] border border-[#D9E1FF] bg-[#F5F7FF] px-3 py-2 text-[12px] font-semibold leading-5 text-[#506095]">
+        主产品外观、结构、角度和透视严格不变；参考图只按前置 Prompt 提取背景与棚拍灯光，不自动添加蚊虫或灭蚊特效。
+      </div>
+      <GenerateSelect dense disabled={locked} label="模型" onChange={updateModel} options={modelOptions} renderValue={modelDisplayName} value={modelId} />
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+        <GenerateSelect dense disabled={locked} label="画幅比例" onChange={(value) => updateParam("aspectRatio", value)} options={aspectRatioOptions} value={params.aspectRatio === "Auto" ? "自动" : params.aspectRatio ?? "自动"} />
+        <GenerateSelect dense disabled={locked} label="分辨率" menuAlign="right" onChange={(value) => updateParam("resolution", value)} options={spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"]} value={params.resolution ?? "1K"} />
+        <GenerateSelect dense disabled={locked} label="生成张数" onChange={(value) => updateParam("imageCount", value)} options={["1", "2", "3", "4"]} value={params.imageCount ?? "1"} />
+        <GenerateSelect dense disabled={locked} label="背景处理" menuAlign="right" onChange={(value) => updateParam("backgroundMode", value)} options={["按 Prompt / 参考图", "纯白", "浅灰", "无缝摄影棚"]} value={params.backgroundMode} />
+        <GenerateSelect dense disabled={locked} label="摄影棚灯光" onChange={(value) => updateParam("studioLighting", value)} options={["自动专业布光", "高调柔光", "正面柔光", "左侧主光", "右侧主光", "顶部柔光", "三点布光", "轮廓光", "柔光箱棚拍"]} value={params.studioLighting} />
+        <GenerateSelect dense disabled={locked} label="诱蚊灯光" menuAlign="right" onChange={(value) => updateParam("mosquitoWavelength", value)} options={["无｜灯光关闭", "365 nm｜近紫外深紫", "395 nm｜标准紫光", "410 nm｜蓝紫光"]} value={params.mosquitoWavelength} />
+        <GenerateSelect dense disabled={locked} label="阴影强度" onChange={(value) => updateParam("shadowStrength", value)} options={["无明显阴影", "极弱", "柔和", "标准", "清晰"]} value={params.shadowStrength} />
+        <GenerateSelect dense disabled={locked} label="高光控制" menuAlign="right" onChange={(value) => updateParam("highlightControl", value)} options={["柔和", "标准", "清晰", "高级镜面高光"]} value={params.highlightControl} />
+        <GenerateSelect dense disabled={locked} label="色温" onChange={(value) => updateParam("colorTemperature", value)} options={["自动", "冷白", "中性", "暖白"]} value={params.colorTemperature} />
+        <GenerateSelect dense disabled label="产品锁定" menuAlign="right" onChange={() => undefined} options={["严格"]} value={params.productLock} />
+      </div>
+    </div>
+  );
+}
+
 function IndustrialDesignImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const promptCount = useCanvasStore((state) => state.edges
@@ -2341,16 +2410,20 @@ function RemixSlider({
 
 function GenerateSelect({
   compact,
+  dense = false,
   disabled = false,
   label,
+  menuAlign = "left",
   onChange,
   options,
   renderValue,
   value
 }: {
   compact?: boolean;
+  dense?: boolean;
   disabled?: boolean;
   label: string;
+  menuAlign?: "left" | "right";
   onChange: (value: string) => void;
   options: string[];
   renderValue?: (value: string) => string;
@@ -2374,10 +2447,10 @@ function GenerateSelect({
 
   return (
     <div className={`relative block ${compact ? "w-[132px]" : "w-full"}`} ref={wrapperRef}>
-      <span className="mb-0.5 block px-3 text-[13px] font-medium leading-none text-[#525866]">{label}</span>
+      <span className={`block px-3 font-medium leading-none text-[#525866] ${dense ? "mb-1 text-[11px]" : "mb-0.5 text-[13px]"}`}>{label}</span>
       <span className="relative block">
         <button
-          className={`h-8 w-full rounded-[16px] border bg-[#F6F7FA] px-4 pr-9 text-left text-[16px] font-semibold text-[#7C7F86] outline-none transition ${
+          className={`h-8 w-full rounded-[16px] border bg-[#F6F7FA] px-4 pr-9 text-left font-semibold text-[#686E7A] outline-none transition ${dense ? "text-[13px]" : "text-[16px]"} ${
             disabled ? "cursor-not-allowed opacity-60" : ""
           } ${open ? "border-selected" : "border-[#D9DDE6]"
           }`}
@@ -2397,13 +2470,13 @@ function GenerateSelect({
       </span>
       {open ? (
         <div
-          className="absolute left-0 right-0 top-[46px] z-50 max-h-[236px] overflow-y-auto rounded-[12px] border border-[#D9DDE6] bg-white p-1 shadow-soft"
+          className={`absolute top-[46px] z-50 max-h-[236px] min-w-full w-max max-w-[260px] overflow-y-auto rounded-[12px] border border-[#D9DDE6] bg-white p-1 shadow-soft ${menuAlign === "right" ? "right-0" : "left-0"}`}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
           {options.map((option) => (
             <button
-              className={`block h-8 w-full rounded-[9px] px-3 text-left text-[16px] font-semibold ${
+              className={`flex h-8 w-full items-center gap-2 whitespace-nowrap rounded-[9px] px-3 text-left font-semibold ${dense ? "text-[13px]" : "text-[16px]"} ${
                 option === value ? "bg-selected text-white" : "text-[#7C7F86] hover:bg-[#F4F6FA]"
               }`}
               key={option}
@@ -2413,8 +2486,10 @@ function GenerateSelect({
               }}
               type="button"
             >
-              {option === value ? "✓ " : ""}
-              {renderValue ? renderValue(option) : option}
+              <span className="grid h-4 w-4 shrink-0 place-items-center">
+                {option === value ? <Check aria-hidden="true" size={14} strokeWidth={2.4} /> : null}
+              </span>
+              <span>{renderValue ? renderValue(option) : option}</span>
             </button>
           ))}
         </div>
