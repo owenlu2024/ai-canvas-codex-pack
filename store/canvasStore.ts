@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Edge, Node, Viewport, XYPosition } from "@xyflow/react";
 import { getApiSettingsForModel, getBaseModelId, getClientAiSettingsPayload } from "@/lib/clientAiSettings";
 import { addClientGeneratedImages } from "@/lib/clientGeneratedImages";
+import { getImageDisplayUrl } from "@/lib/imageDisplayUrl";
 import { defaultIndustrialDesignImageModelId, defaultProductRemixModelId, defaultSceneImageModelId, getDefaultIndustrialDesignImageParams, getDefaultProductRemixParams, getDefaultSceneImageParams, getReferenceImageLimit } from "@/lib/generateImageModels";
 import { nodeLabels, type CanvasNodeData, type NodeKind } from "@/lib/nodeTypes";
 import { buildVisibleTextPromptRichHtml } from "@/lib/promptHighlight";
@@ -54,7 +55,7 @@ function makeNode(id: string, kind: NodeKind, position: XYPosition, zIndex: numb
 }
 
 function isRunningLockingNode(node: Node<CanvasNodeData>) {
-  return (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
+  return (node.data.kind === "generateImage" || node.data.kind === "imageTextEditor" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function edgeTouchesRunningLockingNode(edge: Pick<Edge, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
@@ -917,6 +918,25 @@ function loadBrowserImage(src: string) {
   });
 }
 
+async function resizeGeneratedImageToSource(generatedUrl: string, sourceUrl: string) {
+  if (typeof window === "undefined") return generatedUrl;
+  const [generated, source] = await Promise.all([
+    loadBrowserImage(getImageDisplayUrl(generatedUrl, "text-edit-generated.png")),
+    loadBrowserImage(getImageDisplayUrl(sourceUrl, "text-edit-source.png"))
+  ]);
+  const width = source.naturalWidth || source.width;
+  const height = source.naturalHeight || source.height;
+  if (!width || !height) return generatedUrl;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return generatedUrl;
+  context.drawImage(generated, 0, 0, width, height);
+  const mimeType = sourceUrl.startsWith("data:image/jpeg") || sourceUrl.startsWith("data:image/jpg") ? "image/jpeg" : "image/png";
+  return canvas.toDataURL(mimeType, mimeType === "image/jpeg" ? 0.95 : undefined);
+}
+
 async function prepareTaobaoPlannerImageUrl(imageUrl: string) {
   if (typeof window === "undefined" || !imageUrl.startsWith("data:image/")) return imageUrl;
   try {
@@ -1003,7 +1023,6 @@ function getImageRoleFromPrompt(prompt: string, imageNumber: number) {
   const escapedToken = imageToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const mentionPattern = new RegExp(`(?:<\\s*Image\\s*${escapedToken}\\s*>|@\\s*(?:Image\\s*)?0*${imageNumber}\\b)`, "i");
   const explicitStyleLabels = getStyleReferenceLabelsFromPrompt(prompt);
-  if (explicitStyleLabels.includes(`<Image${imageToken}>`)) return "style";
   const matchedLines = prompt.split(/\r?\n/).filter((line) => mentionPattern.test(line));
   const matchedLine = matchedLines[0] ?? "";
   const segment = matchedLine
@@ -1013,6 +1032,7 @@ function getImageRoleFromPrompt(prompt: string, imageNumber: number) {
   const matchIndex = prompt.search(mentionPattern);
   const context = segment || (matchIndex >= 0 ? prompt.slice(Math.max(0, matchIndex - 80), matchIndex + 140) : "");
   if (/主图|主产品|main\s*product|hero\s*product|primary\s*product|product\s*(?:identity\s*)?source|identity\s*source|商品主体|产品主体/i.test(context)) return "main";
+  if (explicitStyleLabels.includes(`<Image${imageToken}>`)) return "style";
   if (/结构|structure|造型|形体|geometry/i.test(context)) return "structure";
   if (/尺寸|size|scale|比例|dimension/i.test(context)) return "size";
   if (/场景|scene|environment|setting|background|背景|空间/i.test(context)) return "scene";
@@ -1158,6 +1178,7 @@ async function requestHdRedrawReversePrompt(sourceNodeId: string, imageNode: Nod
 
 function prepareSceneReferenceImagesForGeneration(referenceImages: Node<CanvasNodeData>[], prompt: string) {
   const ordered = orderReferenceImagesForPrompt(referenceImages, prompt);
+  const mosquitoDirectorPrompt = /Mosquito amount\s*:|MOSQUITO AMOUNT NONE|Mosquito Control Scene Rules|Mosquito Safety Visual Rules|Adhesive Face Map|Mosquito control method\s*:|蚊虫数量\s*[:：]|灭蚊方式\s*[:：]/i.test(prompt);
   const hasMainProduct = ordered.some((node) => {
     const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : Number.NaN;
     return Number.isFinite(imageNumber) && getImageRoleFromPrompt(prompt, imageNumber) === "main";
@@ -1169,7 +1190,7 @@ function prepareSceneReferenceImagesForGeneration(referenceImages: Node<CanvasNo
   ordered.forEach((node) => {
     const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : Number.NaN;
     const role = Number.isFinite(imageNumber) ? getImageRoleFromPrompt(prompt, imageNumber) : "reference";
-    if (role === "main") included.push(node);
+    if (role === "main" || mosquitoDirectorPrompt && role === "structure") included.push(node);
     else omitted.push(node);
   });
   return { included, omitted };
@@ -1345,6 +1366,7 @@ function buildSceneImageRules() {
     "- Treat the declared Main Product image as an exact product asset, not a loose visual reference.",
     "- The attached Main Product image is the only image input that may define the product. Other reference images are intentionally not attached in this mode.",
     "- The declared Main Product image is the only visual source for product identity, geometry, silhouette, proportions, details, labels, colors, material layout, openings, vents, lights, markings, and visible faces.",
+    "- SINGLE PRODUCT INSTANCE LOCK: for one normal scene image, render exactly one instance of the declared Main Product unless the connected Prompt explicitly requests multiple units. Never place one product in its required use position and create a second copy on a table, floor, shelf, wall, hand, background, reflection, package, poster, screen, or elsewhere. A reflection may show only physically correct reflected light/form from the same single object and must never read as another product.",
     "- Preserve the exact main product camera angle, yaw, pitch, roll, perspective, visible top/front/side face ratio, silhouette, crop relationship, scale logic, and internal cutouts/openings from the Main Product image.",
     "- Do not use product category words, function words, dimensions, or marketing names from the prompt to invent a new product design. Those words are only for scene placement and scale.",
     "- Do not rotate, front-face, side-face, tilt, straighten, redraw, remodel, simplify, replace, recolor, relabel, add parts, remove parts, or reinterpret the product to fit the scene.",
@@ -1426,9 +1448,13 @@ function buildSceneGridImagePrompt(promptNodes: Node<CanvasNodeData>[]) {
 }
 
 function buildSceneImagePrompt(promptNodes: Node<CanvasNodeData>[], gridEnabled: boolean) {
-  if (gridEnabled) return buildSceneGridImagePrompt(promptNodes);
   const prompt = promptNodes.map((node) => node.data.prompt).join("\n\n").trim();
   if (!prompt) return "";
+  const mosquitoDirectorPrompt = /Mosquito amount\s*:|MOSQUITO AMOUNT NONE|Mosquito Control Scene Rules|Mosquito Safety Visual Rules|Adhesive Face Map|Mosquito control method\s*:|蚊虫数量\s*[:：]|灭蚊方式\s*[:：]/i.test(prompt);
+  if (mosquitoDirectorPrompt) {
+    return gridEnabled ? buildMosquitoSceneGridImagePrompt(promptNodes) : buildMosquitoScenePanelPrompt(prompt);
+  }
+  if (gridEnabled) return buildSceneGridImagePrompt(promptNodes);
   return buildScenePanelPrompt(prompt);
 }
 
@@ -1454,6 +1480,7 @@ function buildMosquitoSceneContentRules() {
     "- FALLEN DEAD-MOSQUITO MASTER LOCK: fallen, loose, or detached dead mosquitoes on a table, counter, platform, floor, ground, furniture, product base, inside the product, or any surrounding surface are permitted ONLY when the connected prompt explicitly contains BOTH Electric Grid method and Clearly Visible Electric Effect. Glue Board may show dead captured mosquitoes only while they remain fully attached to an explicitly mapped adhesive face; this does not grant permission for fallen bodies.",
     "- FAN SUCTION CORPSE BAN: every visible mosquito is alive and either flying or being pulled into the real inlet. Never place a dead mosquito on any support surface or inside the product. GLUE BOARD ATTACHED-CORPSE RULE: captured mosquitoes may be alive, immobilized, or dead, but every body must remain physically stuck flat to an explicitly adhesive face; never place a loose or fallen body on any surrounding surface. Auto Match does not grant permission for fallen corpses.",
     "- GLUE-BOARD UNIVERSAL ADHESIVE-FACE MAP LOCK: read the connected prompt's Adhesive Face Map or explicit annotation and identify (1) the exact physical glue-board part, (2) whether adhesive is on the front face only, rear face only, both faces, or another explicitly marked surface, (3) which adhesive faces/regions are genuinely visible from the locked source viewpoint, and (4) whether any separate baffle, cover, light, housing, or spacer creates an occlusion relationship. User labels are authoritative; never reinterpret, mirror, reverse, or guess a different face.",
+    "- NO VISIBLE GLUE BORDER LOCK: adhesive, sticky, glue board, double-sided adhesive, 粘胶, 双面胶, and 双面粘胶 describe a flat surface property only. They never authorize a visible glue bead, glue rim, gel edge, adhesive border, tape strip, raised lip, transparent outline, glossy frame, thick seam, or extra layer around the glue board. If the connected source images do not visibly show such an edge, generate none. Preserve the board's exact clean contour, original edge thickness, corner shape, surface color, and depth relationship to the light, cover, panel, and housing.",
     "- Never infer adhesive from color, transparency, material, shape, brightness, or proximity to the attraction light. Glue boards may be any color and shape. A product may have no baffle at all; never invent one. If a baffle or cover exists, preserve only the relationship explicitly stated for that product and treat it as non-adhesive unless the user explicitly marks it adhesive.",
     "- SINGLE-SIDED RULE: if only the front is adhesive, captured mosquitoes may appear only on the front adhesive plane; the rear is forbidden. If only the rear is adhesive, captures may appear only on the rear adhesive plane; the front is forbidden. DOUBLE-SIDED RULE: captures may appear on either adhesive face, but only on portions genuinely visible or exposed from the unchanged camera view. Never show a rear-face mosquito through an opaque board.",
     "- Every already-captured mosquito must physically touch and lie flat on an explicitly adhesive surface, aligned to that surface's plane, perspective, and occlusion. Its body and legs must visibly rest against the glue rather than hover in front. ZERO already-captured mosquitoes are allowed on a non-adhesive face, board edge, baffle, cover, light, product shell, wall, socket plate, furniture, floor, or surrounding air.",
@@ -1479,6 +1506,7 @@ function buildMosquitoSceneContentRules() {
     "- PRODUCT INTEGRATION PASS IS MANDATORY: remove the source image's white or studio background while preserving clean product edges; create physically correct contact shadows and ambient occlusion exactly where the product touches or mounts to the wall, socket, table, floor, or support; add a cast shadow with direction and softness matching the scene lights; match local exposure, white balance, contrast, black level, reflection strength, and depth of field; add restrained environmental color spill and bounce light to the existing product surfaces without changing material boundaries or geometry.",
     "- The product must not look pasted, floating, glowing as a separate sticker, or surrounded by a cutout halo. Its sharpness and noise or grain must match the focal plane while the product remains readable. Nearby scene elements may create small physically correct foreground occlusion at the mounting or contact boundary, but must not hide critical product structure.",
     "- WALL-MOUNTED OR PLUG-IN PRODUCTS: preserve the exact plug/base orientation and source view. Align the wall and socket plane to the frozen product rather than rotating the product toward the wall. Add tight ambient occlusion at the socket/base contact, a believable short cast shadow on the wall, and matching wall-color bounce on the product edges. Do not leave a gap that makes the device float, and do not flatten it into a front view.",
+    "- UNIVERSAL WALL-PLUG HARD INSERTION LOCK: when the connected Prompt specifies a mains plug, wall plug, socket, outlet, receptacle, 中式插头, 欧式插头, 美式插脚, 美规插头, 英式插头, 插座, 墙插, or 插入使用, physical insertion is mandatory and has higher priority than ordinary scene composition AND exact source-angle locking. The connected user Prompt is the sole highest-priority authority for the socket standard. If it states Chinese, European, American/US, British/UK, or another socket type, generate exactly that regional receptacle. Never auto-detect, guess, reinterpret, or override the Prompt-specified socket type from the product image or model assumptions; reference images may preserve product and plug geometry but cannot change the named socket standard. Every real flat blade, round pin, angled pin, and grounding pin must align with its corresponding opening and be fully inserted; show no exposed conductive pin section. The occupied receptacle must be hidden behind the product, and the product rear/base must sit tightly against the faceplate with only a narrow realistic contact shadow and ambient occlusion. Never substitute another socket standard, remove or invent pins, place the product beside or floating in front of the outlet, leave a gap, or add an invented adapter, cable, bracket, pedestal, or extra plug. PHYSICAL-MOUNTING EXCEPTION: allow the smallest necessary rotation, yaw/pitch change, and perspective adaptation of the whole product to align its real plug direction with the Prompt-specified receptacle. Preserve the exact product identity, silhouette, proportions, colors, materials, component layout, and plug geometry; do not deform, redesign, mirror, or replace it. After insertion, adapt the wall, faceplate, camera, and scene around the physically valid mounted pose.",
     "- Treat the attached Main Product as a fixed photographed asset placed into a new environment. Human hands, props, furniture, and framing must adapt to its fixed view. They must not force a new product pose, new camera orbit, new silhouette, or new perspective.",
     "- Do not add any person, pet, mosquito, action, mechanism effect, or dramatic visual effect merely because this is a mosquito-control product. Only the connected prompt authorizes scene content.",
     "Before generating, internally make a REQUIRED VISIBLE CONTENT checklist and a FORBIDDEN CONTENT checklist from the connected prompt. Compose the image so every required item is visibly satisfied and every forbidden item is absent. Do not print either checklist in the image."
@@ -1486,14 +1514,43 @@ function buildMosquitoSceneContentRules() {
 }
 
 function buildMosquitoScenePanelPrompt(prompt: string) {
-  return [
+  const noMosquitoes = /MOSQUITO AMOUNT NONE|Mosquito amount\s*:\s*None|蚊虫数量\s*[:：]\s*无|零蚊虫/i.test(prompt);
+  const glueBoardMethod = /Mosquito control method\s*:\s*Glue Board|灭蚊方式\s*[:：]\s*粘板粘捕/i.test(prompt);
+  const electricGridMethod = /Mosquito control method\s*:\s*Electric Grid|灭蚊方式\s*[:：]\s*电击灭蚊/i.test(prompt);
+  const visibleElectricEffect = /Functional mechanism effect preset\s*:\s*Clearly Visible Electric Effect|功能特效\s*[:：]\s*明显电击/i.test(prompt);
+  const rulesBeforeConnectedPrompt = [
     buildSceneImageRules(),
     buildMosquitoSceneContentRules(),
-    "CONNECTED PROMPT - execute all explicit visual requirements:",
-    prompt.trim(),
-    "FINAL COMPLIANCE PASS:",
-    "Verify that every explicitly requested person/pet state, interaction, mosquito state, time, location, attraction light, mechanism effect, product placement, and atmosphere is clearly visible. If an item was not requested, do not add it. If an item was forbidden, remove it. First compare the generated product projection against the Main Product: reject any changed yaw, pitch, roll, perspective, visible-face ratio, plate overlap, feature coordinate, rotation, skew, or non-uniform scaling. Then verify physical scene integration: correct mounting/contact, tight ambient occlusion, matching cast shadow, exposure, white balance, contrast, reflections, edge softness, depth of field, environmental color spill, and no white cutout halo, pasted look, or floating gap. Remove every mosquito trajectory, dotted line, dashed curve, arrow, and thin graphic guide line. For fan suction, verify that intake cues enter only beneath/inside the illuminated attraction-light chamber and never at the lower-base exhaust grille. For glue-board capture, use the current product's Adhesive Face Map rather than any assumed color or structure. Verify every already-captured mosquito physically touches and lies flat on an explicitly adhesive front/rear/double-sided visible region; verify ZERO captured mosquitoes on every mapped non-adhesive surface or in the air. Verify no baffle, cover, adhesive side, or layer order was invented, and reject any result that rotates the product or changes part overlap to expose more glue. For every electric preset, verify that the outer protective mesh has no electricity and that all flashes sit on the second inner grid. For Clearly Visible Electric Effect, verify varied small and medium electrical points, many fine branches with mixed opaque/semi-transparent opacity, and one readable mosquito whose body is directly touched by an arc endpoint with an impact flash at the contact point. Verify a visibly increased number of clean dead mosquitoes scattered irregularly and messily on the external support surface around the base, with varied rotations, distances, density, loose clusters, and no row/grid/equal-spacing pattern; verify none are inside the product. For every other electric preset, verify that no mosquito is being struck and no dead mosquito appears. Remove any giant starburst, evenly radial spokes, uniform spiderweb, or cracked-glass effect. Re-check every numerical product dimension against at least two familiar scene objects and reject any composition that makes the product oversized. Keep the Main Product structure and exact original 2D viewpoint unchanged."
+    "CONNECTED PROMPT - execute all explicit visual requirements:"
   ].join("\n\n");
+  const rulesAfterConnectedPrompt = [
+    noMosquitoes
+      ? "ABSOLUTE ZERO-MOSQUITO FINAL OVERRIDE: render zero mosquitoes of every kind and in every state. No flying, captured, stuck, electrocuted, dead, fallen, blurred, silhouetted, reflected, background, decorative, or diagrammatic mosquito may appear. Ignore every mechanism rule that would otherwise add an insect."
+      : "",
+    glueBoardMethod && !noMosquitoes
+      ? "GLUE-BOARD FINAL OVERRIDE - ZERO FALLEN CORPSES: every captured, immobilized, or dead mosquito must physically touch and lie flat on the explicitly adhesive face of the real glue board shown by the Structure Reference. Render zero loose or fallen mosquito bodies on the wall, outlet, socket plate, product shell, transparent decorative panel, light panel, board edge, table, furniture, bed, floor, ground, air, or any surrounding surface. Do not place captured insects on the outer transparent/decorative panel or housing. If the genuinely visible adhesive area is too small, reduce the captured count; never move insects to a forbidden surface. Adhesive is a flat surface property and must not create a visible glue border."
+      : "",
+    !noMosquitoes && (!electricGridMethod || !visibleElectricEffect)
+      ? "FALLEN-CORPSE FINAL OVERRIDE: render zero fallen, loose, or detached mosquito corpses anywhere in the image. Fallen bodies are allowed only for Electric Grid method combined with Clearly Visible Electric Effect. Glue Board captures remain physically attached flat to the adhesive face and never fall."
+      : "",
+    /plug|socket|outlet|receptacle|插脚|插头|插座|墙插/i.test(prompt)
+      ? "WALL-PLUG FINAL OVERRIDE - ONE PRODUCT, ONE COMPLETED CONNECTION: render exactly one Main Product and one matching occupied receptacle. Every real plug blade/pin/prong must be fully inserted into that receptacle, the occupied socket opening must be hidden behind the product, and the product rear/base must touch the faceplate with tight ambient occlusion. Do not show the product beside, in front of, or hovering near an empty visible outlet. Do not create a second product, second mounting copy, detached product, extra socket connection, exposed conductive pin, gap, adapter, cable, bracket, or pedestal. Physical insertion overrides exact source angle; minimally rotate the whole unchanged product when required while preserving its identity, structure, proportions, materials, colors, and parts."
+      : "",
+    "FINAL COMPLIANCE PASS:",
+    "Verify that every explicitly requested person/pet state, interaction, mosquito state, time, location, attraction light, mechanism effect, product placement, and atmosphere is clearly visible. If an item was not requested, do not add it. If an item was forbidden, remove it. Verify that a normal single scene contains exactly one Main Product instance unless the connected Prompt explicitly requests multiple units; reject every duplicate product on a table, wall, floor, shelf, hand, background, reflection, package, poster, or screen. First compare the generated product against the Main Product: preserve identity, structure, silhouette, proportions, colors, materials, parts, and feature layout. Then verify physical scene integration: correct mounting/contact, tight ambient occlusion, matching cast shadow, exposure, white balance, contrast, reflections, edge softness, depth of field, environmental color spill, and no white cutout halo, pasted look, or floating gap. For a wall-plug product, use exactly the socket standard stated in the connected Prompt and reject the image unless every real blade/pin/prong is fully inside the matching receptacle, the used socket opening is hidden behind the product, the rear/base contacts the faceplate, and there is no exposed conductive pin, side-by-side placement, visible gap, hovering, mismatched socket, or invented adapter. The minimum whole-product angle adjustment required for real insertion is allowed and overrides exact source-angle locking. Remove every mosquito trajectory, dotted line, dashed curve, arrow, and thin graphic guide line. If Mosquito amount is None, reject every visible mosquito. Otherwise, verify the selected mosquito quantity is visibly represented. For fan suction, verify that intake cues enter only beneath/inside the illuminated attraction-light chamber and never at the lower-base exhaust grille. For glue-board capture, use the current product's Adhesive Face Map rather than any assumed color or structure. Verify every already-captured mosquito physically touches and lies flat on an explicitly adhesive front/rear/double-sided visible region; verify ZERO already-captured mosquitoes on every mapped non-adhesive surface or in the air. Verify no visible glue border, baffle, cover, adhesive side, or layer order was invented. For every electric preset, verify that the outer protective mesh has no electricity and that all flashes sit on the second inner grid. For Clearly Visible Electric Effect, verify varied small and medium electrical points, many fine branches with mixed opaque/semi-transparent opacity, and one readable mosquito whose body is directly touched by an arc endpoint with an impact flash at the contact point. For every other electric preset, verify that no mosquito is being struck and no fallen dead mosquito appears. Remove any giant starburst, evenly radial spokes, uniform spiderweb, or cracked-glass effect. Re-check every numerical product dimension against at least two familiar scene objects and reject any composition that makes the product oversized."
+  ].join("\n");
+  const promptLimit = 31800;
+  const fixedRulesLength = rulesBeforeConnectedPrompt.length + rulesAfterConnectedPrompt.length + 4;
+  const connectedPromptBudget = Math.max(0, promptLimit - fixedRulesLength);
+  const trimmedPrompt = prompt.trim();
+  const compactedMarker = "\n\n[仅压缩了用户 Prompt 中间的重复内容；所有预设规则均完整保留]\n\n";
+  const retainedPromptBudget = Math.max(0, connectedPromptBudget - compactedMarker.length);
+  const promptHeadLength = Math.ceil(retainedPromptBudget * 0.7);
+  const promptTailLength = Math.max(0, retainedPromptBudget - promptHeadLength);
+  const connectedPrompt = trimmedPrompt.length <= connectedPromptBudget
+    ? trimmedPrompt
+    : `${trimmedPrompt.slice(0, promptHeadLength)}${compactedMarker}${trimmedPrompt.slice(-promptTailLength)}`;
+  return `${rulesBeforeConnectedPrompt}\n\n${connectedPrompt}\n\n${rulesAfterConnectedPrompt}`;
 }
 
 function buildMosquitoSceneGridImagePrompt(promptNodes: Node<CanvasNodeData>[]) {
@@ -2566,6 +2623,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               },
               ...data
             }
+        : kind === "imageTextEditor"
+          ? {
+              modelId: "gemini-3-pro-image",
+              modelParams: {
+                extractedText: "",
+                originalText: "",
+                safetyStatus: "unchecked",
+                sampleMarker: "false"
+              },
+              ...data
+            }
         : kind === "taobaoPageDirector"
           ? {
               modelId: defaultTaobaoPageDirectorModel,
@@ -2687,6 +2755,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       .filter((node): node is Node<CanvasNodeData> => Boolean(node));
     let promptNodes = inputNodes.filter((node) => typeof node.data.prompt === "string" && node.data.prompt.trim());
     const isGenerateImageNode = source.data.kind === "generateImage";
+    const isImageTextEditorNode = source.data.kind === "imageTextEditor";
     const isHdRedrawNode = source.data.kind === "hdRedraw";
     const isHdRedraw2Node = source.data.kind === "hdRedraw2";
     const isRhinoTestNode = source.data.kind === "rhinoTest";
@@ -2696,6 +2765,89 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const isMosquitoSceneImageNode = source.data.kind === "mosquitoSceneImage";
     const isIndustrialDesignImageNode = source.data.kind === "industrialDesignImage";
     const isProductRemixNode = source.data.kind === "productRemix";
+    if (isImageTextEditorNode) {
+      const sourceImages = inputEdges
+        .filter((edge) => edge.targetHandle === "image-in")
+        .map((edge) => snapshot.nodes.find((node) => node.id === edge.source))
+        .filter((node): node is Node<CanvasNodeData> => Boolean(node?.data.kind === "image" && node.data.imageUrl));
+      const sourceImage = sourceImages[0];
+      const originalText = source.data.modelParams?.originalText?.trim() ?? "";
+      const editedText = source.data.prompt?.trim() ?? "";
+      const blocked = source.data.modelParams?.safetyStatus === "sensitive" && source.data.modelParams?.sampleMarker !== "true";
+      if (!sourceImage || sourceImages.length !== 1 || !originalText || !editedText || blocked) {
+        const errorMessage = blocked
+          ? "检测到可能属于票据或凭证。请先在输入图片明显位置添加“测试样品”或“SAMPLE”字样，再重新提取。"
+          : sourceImages.length !== 1
+            ? "图片文字修改节点必须且只能连接 1 张图片。"
+            : "请先提取文字，并在文本框中完成修改。";
+        set((state) => ({ nodes: state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage, generationId: undefined, runState: "failed" as const } } : node) }));
+        return;
+      }
+      const controller = new AbortController();
+      generationControllers.get(id)?.abort();
+      generationControllers.set(id, controller);
+      try {
+        const sourceElement = await loadBrowserImage(sourceImage.data.imageUrl as string);
+        const targetWidth = sourceElement.naturalWidth || sourceElement.width;
+        const targetHeight = sourceElement.naturalHeight || sourceElement.height;
+        const modelId = typeof source.data.modelId === "string" ? source.data.modelId : defaultSceneImageModelId;
+        const prompt = [
+          "IMAGE TEXT EDITING — STRICT LOCAL EDIT.",
+          "Use the attached image as the immutable original canvas. Replace only the visible text that changed between ORIGINAL TEXT and NEW TEXT.",
+          "Preserve every non-text pixel and all unchanged text. Do not redesign, redraw, crop, extend, recolor, relight, sharpen, move, resize, rotate, or alter any person, product, logo, illustration, photograph, background, texture, border, table, icon, QR code or barcode.",
+          "For each changed text region, preserve its exact original position, alignment, baseline, line wrapping, font appearance, font weight, width, height, spacing, color, gradient, outline, shadow, glow, opacity, rotation, perspective, distortion, print texture and blending.",
+          "Keep the permanent visible TEST SAMPLE / 测试样品 / SAMPLE marking unchanged when present.",
+          `The output canvas must remain exactly ${targetWidth} × ${targetHeight} pixels with the same aspect ratio.`,
+          `ORIGINAL TEXT:\n${originalText}`,
+          `NEW TEXT:\n${editedText}`,
+          "Return one edited image only."
+        ].join("\n\n");
+        const preparedImage = await prepareGenerationReferenceImageUrl(sourceImage.data.imageUrl as string);
+        const generated = await requestGeneratedImages({
+          aiSettings: getClientAiSettingsPayload(),
+          images: [preparedImage],
+          mode: "submit",
+          model: modelId,
+          params: { aspectRatio: getAspectRatioLabelFromSize(targetWidth, targetHeight), imageCount: "1", targetHeight: String(targetHeight), targetWidth: String(targetWidth) },
+          prompt,
+          sourceNodeId: id
+        }, controller);
+        if (!generated[0]?.url) throw new Error("图片文字修改没有返回图片。 ");
+        const finalImageUrl = await resizeGeneratedImageToSource(generated[0].url, sourceImage.data.imageUrl as string);
+        addClientGeneratedImages([{ imageUrl: finalImageUrl, modelId, prompt, sourceNodeId: id }]);
+        generationControllers.delete(id);
+        set((state) => {
+          const cleaned = removeConnectedGeneratedOutputs(state, id);
+          const currentSource = cleaned.nodes.find((node) => node.id === id);
+          if (!currentSource || currentSource.data.generationId !== generationId) return state;
+          const imageNumber = getNextImageNumber(cleaned.nodes);
+          if (!imageNumber) return state;
+          const nextIndex = nextZIndex(state.globalZIndex);
+          const generatedAt = Date.now();
+          const outputNode = makeNode(`image-text-edited-${generatedAt}`, "image", findSingleOutputPosition(currentSource, cleaned.nodes), nextIndex, {
+            generatedBy: id,
+            imageNumber,
+            imageUrl: finalImageUrl,
+            modelId,
+            prompt,
+            runState: "completed",
+            title: "文字修改图片"
+          });
+          return {
+            activeEdgeId: null,
+            edges: [...cleaned.edges, { id: `edge-image-text-edited-${generatedAt}`, source: id, target: outputNode.id, sourceHandle: "image-out", targetHandle: "image-in", type: "deletable", selected: false, data: { generatedBy: id, portType: "image" } }],
+            globalZIndex: nextIndex,
+            historyFuture: [],
+            historyPast: pushHistory(state),
+            nodes: [...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, runState: "completed" as const } } : node), outputNode]
+          };
+        });
+      } catch (error) {
+        generationControllers.delete(id);
+        set((state) => ({ nodes: state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: getGenerateImageErrorMessage(error), generationId: undefined, runState: error instanceof Error && error.name === "AbortError" ? "idle" as const : "failed" as const } } : node) }));
+      }
+      return;
+    }
     const generateGridEnabled = isGenerateImageNode && source.data.modelParams?.gridEnabled === "true";
     const sceneGridEnabled = (isSceneImageNode || isMosquitoSceneImageNode) && source.data.modelParams?.gridEnabled === "true";
     const industrialDesignGridEnabled = isIndustrialDesignImageNode && source.data.modelParams?.gridEnabled === "true";

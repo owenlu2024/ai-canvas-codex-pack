@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Pencil } from "lucide-react";
 import type { Node, NodeProps } from "@xyflow/react";
-import { getBaseModelId, readClientAiSettings } from "@/lib/clientAiSettings";
+import { getBaseModelId, getClientAiSettingsPayload, readClientAiSettings } from "@/lib/clientAiSettings";
 import { getImageDisplayUrl } from "@/lib/imageDisplayUrl";
 import { type CanvasNodeData } from "@/lib/nodeTypes";
 import { buildVisibleTextPromptRichHtml } from "@/lib/promptHighlight";
@@ -138,6 +138,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const canCopyPrompt = data.kind === "prompt" && Boolean(data.prompt?.trim());
   const isAiNode = data.kind === "imageChat" || data.kind === "multiGenerate";
   const isGenerateImageNode = data.kind === "generateImage";
+  const isImageTextEditorNode = data.kind === "imageTextEditor";
   const isHdRedrawNode = data.kind === "hdRedraw";
   const isHdRedraw2Node = data.kind === "hdRedraw2";
   const isRhinoTestNode = data.kind === "rhinoTest";
@@ -147,7 +148,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const isMosquitoSceneImageNode = data.kind === "mosquitoSceneImage";
   const isIndustrialDesignImageNode = data.kind === "industrialDesignImage";
   const isProductRemixNode = data.kind === "productRemix";
-  const isImageGeneratorNode = isGenerateImageNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isMosquitoSceneImageNode || isIndustrialDesignImageNode || isProductRemixNode;
+  const isImageGeneratorNode = isGenerateImageNode || isImageTextEditorNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isMosquitoSceneImageNode || isIndustrialDesignImageNode || isProductRemixNode;
   const isAiPromptNode = data.kind === "imageChat";
   const isSceneDirectorNode = data.kind === "sceneDirector";
   const isMosquitoSceneDirectorNode = data.kind === "mosquitoSceneDirector";
@@ -160,8 +161,8 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const isRunning = data.runState === "running";
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
   const displayTitle = imageNumber ? `Image ${imageNumber}` : data.title;
-  const nodeWidth = isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 690 : isIndustrialDesignerNode ? 620 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const nodeWidth = isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageTextEditorNode ? 480 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
+  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 690 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
 
@@ -326,6 +327,9 @@ function renderContent(id: string, data: CanvasNodeData) {
   if (data.kind === "generateImage") {
     return <GenerateImagePanel id={id} data={data} />;
   }
+  if (data.kind === "imageTextEditor") {
+    return <ImageTextEditorPanel id={id} data={data} />;
+  }
   if (data.kind === "hdRedraw") {
     return <HdRedrawPanel id={id} data={data} step="1" />;
   }
@@ -385,6 +389,132 @@ function renderContent(id: string, data: CanvasNodeData) {
           <div className="rounded-[10px] border border-line bg-[#F5F6FA]" key={slot} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function ImageTextEditorPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const inputImageUrl = useCanvasStore((state) => {
+    const edge = state.edges.find((item) => item.target === id && item.targetHandle === "image-in");
+    const node = edge ? state.nodes.find((item) => item.id === edge.source) : undefined;
+    return typeof node?.data.imageUrl === "string" ? node.data.imageUrl : "";
+  });
+  const [extracting, setExtracting] = useState(false);
+  const params = data.modelParams ?? {};
+  const sensitive = params.safetyStatus === "sensitive";
+  const sampleMarker = params.sampleMarker === "true";
+  const blocked = sensitive && !sampleMarker;
+  const locked = data.runState === "running" || extracting;
+  const text = data.prompt ?? params.extractedText ?? "";
+
+  const extractText = async () => {
+    if (!inputImageUrl || locked) {
+      if (!inputImageUrl) updateNodeData(id, { errorMessage: "请先用绿色端口连接 1 张图片。", runState: "failed" });
+      return;
+    }
+    setExtracting(true);
+    updateNodeData(id, { errorMessage: undefined, runState: "running" });
+    try {
+      const apiPrefix = typeof data.modelId === "string" ? data.modelId.match(/^(\d{3})-/)?.[1] : undefined;
+      const extractionModel = apiPrefix ? `${apiPrefix}-gemini-2.5-flash` : "gemini-2.5-flash";
+      const response = await fetch("/api/ai/image-text-editor", {
+        body: JSON.stringify({
+          aiSettings: getClientAiSettingsPayload(),
+          image: inputImageUrl,
+          model: extractionModel,
+          sourceNodeId: id
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const payload = await response.json() as { error?: string; text?: string; sensitiveDocument?: boolean; sampleMarkerVisible?: boolean; reason?: string };
+      if (!response.ok) throw new Error(payload.error || `文字提取失败：${response.status}`);
+      const extractedText = payload.text?.trim() ?? "";
+      updateNodeData(id, {
+        errorMessage: payload.sensitiveDocument && !payload.sampleMarkerVisible
+          ? "检测到可能属于票据或凭证。请先在输入图片明显位置添加“测试样品”或“SAMPLE”字样，再重新提取。"
+          : undefined,
+        modelParams: {
+          ...params,
+          extractedText,
+          originalText: extractedText,
+          safetyReason: payload.reason ?? "",
+          safetyStatus: payload.sensitiveDocument ? "sensitive" : "normal",
+          sampleMarker: payload.sampleMarkerVisible ? "true" : "false"
+        },
+        prompt: extractedText,
+        runState: payload.sensitiveDocument && !payload.sampleMarkerVisible ? "failed" : "completed"
+      }, { record: true });
+    } catch (error) {
+      updateNodeData(id, { errorMessage: error instanceof Error ? error.message : "文字提取失败。", runState: "failed" });
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-3">
+      <div className="rounded-[10px] border border-[#DDE4FF] bg-[#F5F7FF] px-3 py-2 text-[11px] font-semibold leading-4 text-[#53649A]">
+        只修改文字；字体、字重、颜色、描边、阴影、透视与非文字内容保持原图。输出尺寸和画幅跟随输入图。
+      </div>
+      <div>
+        <span className="mb-1 block px-1 text-[12px] font-semibold text-[#525866]">图片模型</span>
+        <NodeModelSelect id={id} kind="image" value={data.modelId} />
+      </div>
+      <button
+        className="nodrag nopan h-9 rounded-[10px] bg-[#EEF0FF] text-[13px] font-bold text-selected transition hover:bg-[#E5E7FF] disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={locked || !inputImageUrl}
+        onClick={(event) => { event.stopPropagation(); void extractText(); }}
+        onPointerDown={(event) => event.stopPropagation()}
+        type="button"
+      >
+        {extracting ? "正在提取文字…" : params.extractedText ? "重新提取文字" : "提取文字"}
+      </button>
+      <div className="block">
+        <div className="mb-1 flex items-center justify-between px-1 text-[12px] font-semibold text-[#525866]">
+          <span>识别文字（可直接修改或添加）</span>
+          <button
+            aria-label="打开文字编辑框"
+            className="nodrag nopan grid h-7 w-7 place-items-center rounded-full text-[#7F8795] transition hover:bg-[#F0F2F7] hover:text-primary disabled:cursor-not-allowed disabled:opacity-35"
+            disabled={!text.trim()}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              window.dispatchEvent(new CustomEvent(openPromptEditorEvent, { detail: { nodeId: id } }));
+            }}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            title="打开大编辑框"
+            type="button"
+          >
+            <Pencil size={15} strokeWidth={2.1} />
+          </button>
+        </div>
+        <textarea
+          className="nodrag nopan nowheel h-[190px] w-full resize-none rounded-[12px] border border-[#D9DDE6] bg-[#FBFCFE] p-3 text-[13px] leading-5 text-[#343944] outline-none focus:border-selected disabled:opacity-60"
+          disabled={locked || !params.extractedText}
+          onChange={(event) => updateNodeData(id, { prompt: event.currentTarget.value })}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          placeholder="连接图片后点击“提取文字”"
+          value={text}
+        />
+      </div>
+      {blocked ? (
+        <div className="rounded-[10px] border border-[#F3C4C4] bg-[#FFF6F6] px-3 py-2 text-[11px] font-semibold leading-4 text-danger">
+          修改已暂停：请在输入图片上明显添加“测试样品”“测试样本”或“SAMPLE”，然后点击“重新提取文字”。
+        </div>
+      ) : (
+        <div className="text-center text-[11px] font-medium text-[#969DAA]">修改文字后，点击右上角“运行”生成图片</div>
+      )}
     </div>
   );
 }
@@ -502,7 +632,7 @@ function MosquitoSceneDirectorPanel({ id, data }: { id: string; data: CanvasNode
   return (
     <div className="nodrag nopan nowheel grid gap-4 pt-1">
       <div className="rounded-[12px] border border-[#D9E1FF] bg-[#F5F7FF] px-4 py-3 text-[12px] font-semibold leading-5 text-[#506095]">
-        用少量、真实微小且不吓人的蚊虫，规划蓝紫诱蚊光、电击、风吸或粘捕效果场景。
+        按“蚊虫数量”设置规划蓝紫诱蚊光、电击、风吸或粘捕效果；选择“无”时画面不出现蚊虫。
       </div>
       <GenerateSelect disabled={locked} label="AI 模型" onChange={(value) => updateNodeData(id, { modelId: value })} options={modelOptions} renderValue={modelDisplayName} value={modelId} />
       <div className="grid grid-cols-2 gap-x-7 gap-y-4">
@@ -516,7 +646,7 @@ function MosquitoSceneDirectorPanel({ id, data }: { id: string; data: CanvasNode
         <GenerateSelect disabled={locked} label="时间氛围" onChange={(value) => updateParam("timeMood", value)} options={["夜晚", "傍晚", "暗光环境", "白天环境", "自动"]} value={nextParams.timeMood} />
         <GenerateSelect disabled={locked || attractionLightDisabled} label="诱蚊光效" onChange={(value) => updateParam("attractionLight", value)} options={attractionLightDisabled ? ["关闭"] : ["克制", "柔和可见", "明显可见"]} value={nextParams.attractionLight} />
         <GenerateSelect disabled={locked} label="诱蚊波长" onChange={(value) => updateParam("mosquitoWavelength", value)} options={["无｜灯光关闭", "365 nm｜近紫外深紫", "395 nm｜标准紫光", "410 nm｜蓝紫光"]} value={nextParams.mosquitoWavelength} />
-        <GenerateSelect disabled={locked} label="蚊虫数量" onChange={(value) => updateParam("insectAmount", value)} options={["极少", "少量", "适量", "大量"]} value={nextParams.insectAmount} />
+        <GenerateSelect disabled={locked} label="蚊虫数量" onChange={(value) => updateParam("insectAmount", value)} options={["无", "极少", "少量", "适量", "大量"]} value={nextParams.insectAmount} />
         <GenerateSelect disabled={locked} label="效果风格" onChange={(value) => updateParam("effectStyle", value)} options={["舒适商业", "科技演示", "原理可视化"]} value={nextParams.effectStyle} />
         <GenerateSelect disabled={locked} label="蚊虫尺度" onChange={(value) => updateParam("insectScale", value)} options={["自动合理", "真实微小", "细节适度放大", "原理示意放大"]} value={nextParams.insectScale} />
         <GenerateNumberInput disabled={locked} label="方案数量" max={6} min={1} onChange={(value) => updateParam("schemes", value)} value={nextParams.schemes} />

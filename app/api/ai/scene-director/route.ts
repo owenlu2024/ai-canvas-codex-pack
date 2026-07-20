@@ -295,7 +295,7 @@ function formatDimensionFacts(facts: DimensionFact[]) {
 
 function getUserDefinedRoleFromContext(context: string) {
   if (/主图|主产品|main\s*product|hero\s*product|product\s*source/i.test(context)) return "Main Product";
-  if (/结构|structure|造型|形体|geometry/i.test(context)) return "Structure Reference";
+  if (/结构|structure|造型|形体|geometry|灯板|粘板|部件|零件|组件|位置关系/i.test(context)) return "Structure Reference";
   if (/尺寸|size|scale|比例|dimension/i.test(context)) return "Size Reference";
   if (/场景|scene|environment|setting|background|背景|空间/i.test(context)) return "Scene Reference";
   if (/风格|style|mood|氛围|cmf/i.test(context)) return "Style Reference";
@@ -327,6 +327,34 @@ function extractUserImageRoles(instruction: string) {
   return roles;
 }
 
+function extractUserImageDefinitions(instruction: string) {
+  const definitions = new Map<string, string[]>();
+  const mentionPattern = /(?:<\s*Image\s*(\d{1,3})\s*>|@\s*(?:Image\s*)?0*(\d{1,3})\b)/gi;
+  const clauses = instruction
+    .slice(0, 20000)
+    .split(/[。\n\r；;]/)
+    .map((clause) => clause.trim())
+    .filter(Boolean)
+    .slice(0, 300);
+
+  clauses.forEach((clause) => {
+    const matches = [...clause.matchAll(mentionPattern)];
+    matches.forEach((match) => {
+      const number = Number(match[1] ?? match[2]);
+      if (!Number.isInteger(number) || number < 1) return;
+      const label = `<Image${String(number).padStart(3, "0")}>`;
+      const normalizedClause = clause.replace(mentionPattern, (token) => {
+        const tokenNumber = Number(token.match(/\d+/)?.[0]);
+        return Number.isInteger(tokenNumber) ? `<Image${String(tokenNumber).padStart(3, "0")}>` : token;
+      });
+      const current = definitions.get(label) ?? [];
+      if (!current.includes(normalizedClause)) current.push(normalizedClause);
+      definitions.set(label, current);
+    });
+  });
+  return definitions;
+}
+
 function buildSceneDirectorInstruction(body: SceneDirectorRequest, images: Array<{ imageNumber?: number; url: string }>) {
   const params = body.params ?? {};
   const schemes = normalizeSchemeCount(params.schemes);
@@ -349,7 +377,8 @@ function buildSceneDirectorInstruction(body: SceneDirectorRequest, images: Array
   const attractionLight = normalizeOption(params.attractionLight, "Soft Visible", { 关闭: "Off", 克制: "Subtle", 柔和可见: "Soft Visible", 明显可见: "Clearly Visible" });
   const backgroundPresence = normalizeOption(params.backgroundPresence, "Auto", { 自动: "Auto", 无人物和宠物: "No People or Pets", 仅人物: "People Only", 仅宠物: "Pets Only", 人物和宠物: "People and Pets" });
   const peopleInteraction = normalizeOption(params.peopleInteraction, "Auto", { 自动: "Auto", 无人物互动: "No Human Interaction", 仅作背景: "Background Only", 手持产品: "Handheld Product Demonstration", 操作使用: "Operating the Product", 拆卸清理: "Disassembly and Cleaning", 被蚊虫困扰: "Bothered by Mosquitoes", 被蚊虫惊扰特效: "Startled by Mosquitoes Advertising Effect" });
-  const insectAmount = normalizeOption(params.insectAmount, "Few", { 极少: "Very Few", 少量: "Few", 适量: "Moderate", 大量: "Large Amount" });
+  const insectAmount = normalizeOption(params.insectAmount, "Few", { 无: "None", 极少: "Very Few", 少量: "Few", 适量: "Moderate", 大量: "Large Amount" });
+  const noMosquitoes = insectAmount === "None";
   const insectScale = normalizeOption(params.insectScale, "Auto Appropriate", { 自动合理: "Auto Appropriate", 真实微小: "Realistic Tiny", 细节适度放大: "Moderately Enlarged Detail", 原理示意放大: "Enlarged Mechanism Illustration" });
   const mosquitoEffectStyle = normalizeOption(params.effectStyle, "Comfortable Commercial", { 舒适商业: "Comfortable Commercial", 科技演示: "Technology Demonstration", 原理可视化: "Mechanism Visualization" });
   const mosquitoEffectPreset = normalizeOption(params.effectPreset, "Auto Match", {
@@ -375,7 +404,7 @@ function buildSceneDirectorInstruction(body: SceneDirectorRequest, images: Array
     "410 nm｜蓝紫光": "410 nm | Blue-Violet | visual simulation color #5B3CFF"
   });
   const mosquitoLightOff = params.mosquitoWavelength === "无｜灯光关闭";
-  const allowFallenDeadMosquitoes = params.mosquitoMethod === "电击灭蚊" && params.effectPreset === "明显电击";
+  const allowFallenDeadMosquitoes = !noMosquitoes && params.mosquitoMethod === "电击灭蚊" && params.effectPreset === "明显电击";
   const mosquitoLightingPriority = mosquitoTimeMood === "Night"
     ? mosquitoLightOff
       ? "Night lighting hierarchy: the product light is OFF. Use restrained moonlight, a dim practical lamp, or low ambient room light as the necessary main illumination while keeping a convincing nighttime exposure."
@@ -470,7 +499,9 @@ function buildSceneDirectorInstruction(body: SceneDirectorRequest, images: Array
         mosquitoLightOff
           ? "Ignore the attraction-light visibility setting because the selected wavelength is None / light OFF."
           : `Blue-violet attraction light visibility: ${attractionLight}. Show a physically plausible soft localized glow only at the product's real light source, never a laser beam, neon explosion, fantasy energy field, or room-filling purple wash.`,
-        `Mosquito amount: ${insectAmount}. Mosquito scale mode: ${insectScale}. Very Few, Few, and Moderate must remain restrained and separated. Large Amount must be visibly more numerous but still distributed across the relevant scene area with readable spacing and visual hierarchy; never turn it into a compact swarm, dense cloud, face-level mass, or frightening macro view.`,
+        noMosquitoes
+          ? "MOSQUITO AMOUNT NONE - ABSOLUTE ZERO-MOSQUITO LOCK: show zero mosquitoes anywhere in the image. No flying, approaching, captured, stuck, electrocuted, dead, fallen, blurred, silhouetted, reflected, background, decorative, or diagrammatic mosquito is allowed. This setting overrides the mosquito-control method, mechanism-effect preset, attraction behavior, glue-capture instructions, electric-effect instructions, and every other rule that would normally add an insect. The product light and non-insect mechanism cues may still follow their selected settings, but the image must contain no mosquito body or mosquito-like shape."
+          : `Mosquito amount: ${insectAmount}. Mosquito scale mode: ${insectScale}. Very Few, Few, and Moderate must remain restrained and separated. Large Amount must be visibly more numerous but still distributed across the relevant scene area with readable spacing and visual hierarchy; never turn it into a compact swarm, dense cloud, face-level mass, or frightening macro view.`,
         "Mosquito scale rules: Auto Appropriate uses realistic tiny scale in wide lifestyle scenes and permits restrained enlargement only in mechanism detail views. Realistic Tiny keeps true-to-life scale. Moderately Enlarged Detail may enlarge mosquitoes only enough to explain attraction or capture action. Enlarged Mechanism Illustration may use a clearly readable technical-diagram scale, but must look clean, neutral, simplified, and non-photorealistic rather than like a giant real insect.",
         "Even when enlarged for a detail or mechanism view, mosquitoes must never look monstrous, aggressive, anatomically grotesque, hairy, wet, sharp, threatening, or larger than necessary. Do not show disturbing body anatomy or horror-style macro detail.",
         `Effect presentation style: ${mosquitoEffectStyle}. The image must feel hygienic, calm, safe, family-friendly, and commercially acceptable.`,
@@ -482,10 +513,11 @@ function buildSceneDirectorInstruction(body: SceneDirectorRequest, images: Array
         "REAL-WORLD PRODUCT SIZE LOCK: every numerical product dimension stated by the user is a mandatory physical-size constraint, not descriptive copy. Keep the rendered product at that exact real-world scale relative to adult hands, people, plates, cups, furniture, tabletop depth, and nearby props. Never enlarge the product to make it the visual hero. Preserve both its stated dimensions and its width-to-height-to-depth proportions; instead adjust camera distance, crop, empty space, and scene composition around the correctly sized product.",
         "PRODUCT-IN-SCENE COMPOSITING PLAN: treat the Main Product as a frozen 2D photographed projection. The downstream generator may translate and uniformly scale this projection to the correct real-world size, but must not rotate it, perspective-warp it, skew it, mirror it, change its yaw/pitch/roll, or alter its visible-face ratios. Design the scene camera, wall/ground plane, support surface, socket or mounting point, furniture, people, and framing around that fixed projection.",
         "Every output prompt must include a Product Integration section that specifies the exact support or mounting relationship, local contact shadow, ambient occlusion, cast-shadow direction, environment color spill, reflection intensity, exposure match, edge softness, depth-of-field match, and any physically correct partial occlusion. These integration effects must make the product belong to the scene without redrawing its geometry or changing its viewpoint.",
+        "PLUG-IN WALL PRODUCT HARD CONNECTION LOCK: whenever the user direction specifies a mains plug, wall plug, socket, outlet, receptacle, or plug-in use, the connected user Prompt is the sole highest-priority authority for the socket standard. If it says Chinese, European, American/US, British/UK, or another socket type, use exactly that stated regional receptacle. Never auto-detect, guess, reinterpret, or override the user-stated socket standard from the product image or model assumptions, and never substitute another country's outlet. Reference images may preserve the product and real plug geometry but cannot change the Prompt-specified socket type. Every real blade, round pin, flat pin, angled pin, and grounding pin belonging to that plug must align with its corresponding receptacle opening and be fully inserted; no conductive portion may remain visibly exposed. The occupied receptacle must be hidden behind the product, and the product rear/base must sit tightly against the outlet faceplate with only a narrow realistic contact shadow and ambient occlusion. Never place the product beside, in front of, hovering near, or disconnected from the outlet. Never invent or remove pins, or add an adapter, cable, pedestal, bracket, or extra plug. PHYSICAL-MOUNTING EXCEPTION: this completed plug-to-receptacle connection has higher priority than exact source-view locking. Allow the smallest necessary rotation, yaw/pitch adjustment, and perspective adaptation of the whole unchanged product so its real plug direction aligns with the Prompt-specified receptacle. Preserve the exact product identity, silhouette, proportions, colors, materials, parts, plug geometry, and internal layout; do not redesign or deform it. Once inserted, compose the wall, faceplate, camera, and scene around that physically valid mounted pose.",
         "Attraction behavior: if mosquitoes are requested, show them as a few independent insects at plausible positions around the product. Never draw flight paths, dotted trails, dashed curves, arrows, trajectory lines, motion-guide lines, swirl lines, or graphic route indicators between mosquitoes and the product.",
         "Electric Grid method — two-layer structure lock: the first/front/outer metal mesh is a non-energized protective safety guard. It must remain visually intact and must never carry a spark, arc, impact point, or struck mosquito. The second/rear/inner mesh beneath the protective guard is the energized high-voltage grid; every electrical effect must sit visibly behind the front guard and attach only to this inner grid. Tiny Spark Points uses one or two tiny natural pinprick flashes on the inner grid and MUST NOT show a mosquito being struck or any dead mosquito. Subtle Electric Arc uses one short, irregular, low-intensity micro-arc on the inner grid and MUST NOT show a mosquito touching, being struck, or already dead. CLEARLY VISIBLE ELECTRIC EFFECT is the only preset allowed to show mosquito electrocution and dead mosquitoes: show one readable mosquito at the instant it contacts the inner energized grid, with at least one electric arc physically terminating on and visibly touching the mosquito's body and a compact impact flash centered exactly at that body-contact point; a nearby mosquito with no direct arc contact does not satisfy this requirement. Add several scattered electrical contact points of varied small and medium sizes and multiple white-blue branching arc networks of different lengths running irregularly between nearby inner-grid conductors. Each arc network must contain many fine secondary branches. Use layered electrical opacity: a few bright near-opaque white-blue core channels, medium-bright semi-opaque branches, and numerous thinner semi-transparent faint peripheral branches. Randomly vary branch thickness, opacity, brightness, sharpness, and local bloom so the discharge has realistic depth instead of uniform neon lines. Also show a visibly increased but still commercially acceptable number of dry, intact dead-mosquito silhouettes scattered naturally on the external support surface around the product base, such as the nearby tabletop or ground. Their placement must look genuinely accidental and messy: irregular spacing, random distance from the base, varied body orientation and resting pose, uneven local density, isolated insects mixed with a few loose two- or three-insect clusters, and occasional slight overlap. Never arrange them in a row, arc, ring, grid, equal spacing, mirrored symmetry, or repeated identical pose. Do not place dead mosquitoes inside the product, inside a collection area, on the front guard, or far across the scene. Make the arcs energetic and advertisement-readable but physically rooted in the inner grid, with natural asymmetry. Never create a single giant starburst, evenly radial spokes, a uniform spiderweb/cracked-glass pattern, decorative lightning symbol, or electricity on the front protective mesh. No room-scale lightning, explosion, smoke, fire, blood, burnt anatomy, wet residue, disgusting close-up, or dense dead-insect pile.",
         "Fan Suction method: the functional air intake is the real intake opening directly beneath or inside the illuminated violet/blue-violet attraction-light chamber. Mosquitoes and any intake effect must be pulled toward that upper illuminated-chamber intake only. The grille or vent at the lower base is the exhaust outlet: never show suction, inward airflow, mosquito attraction, or mosquito entry at the bottom exhaust. Every visible mosquito must be alive and either flying nearby or being pulled into the real inlet; show ZERO fallen or dead mosquitoes on any external surface or inside the product. Subtle Suction uses faint local air disturbance. Clearly Visible Suction uses readable short-range atmospheric pull and mosquito posture. Strong Advertising Suction must be unmistakably and dramatically stronger than Clearly Visible Suction: use a powerful compact funnel-shaped zone of refractive air distortion centered on the real intake, pronounced short-range motion blur, turbulent local haze, and multiple mosquitoes visibly accelerating and tilting into the intake. Make it bold and exaggerated like a high-impact technology advertisement, while keeping the effect compact around the intake and the product structurally unchanged. Do not draw dotted paths, dashed trajectories, arrows, or thin graphic guide lines. Do not deform the product, swap inlet and outlet, or invent vents.",
-        "Glue Board method — universal adhesive-face map lock: first build an explicit Adhesive Face Map only from the user's prompt, role description, product image, or annotated diagram: identify the exact physical glue-board part; whether adhesive exists on the front face only, rear face only, both faces, or another explicitly marked surface; which adhesive faces are actually visible from the locked source viewpoint; and whether a separate baffle, cover, light, housing, or spacer exists in front of or behind the board. User labels are authoritative and override visual guessing. Never infer adhesive from board color, transparency, material, shape, brightness, or proximity to the light. A single-sided board accepts captured mosquitoes only on its explicitly marked adhesive side. A double-sided board accepts captured mosquitoes on either adhesive side, but only where that side is genuinely visible or exposed from the unchanged source view; do not show insects through an opaque board. If the product has no baffle, never invent one. If it has a baffle or cover, preserve the exact annotated depth order and occlusion, and never treat that non-adhesive part as sticky. Captured mosquitoes on the glue board may be alive, immobilized, or dead according to the scene, but every captured body must physically touch and lie flat on an explicitly adhesive surface in the Adhesive Face Map, with body and legs aligned to that surface plane. Glue Board mode must contain ZERO fallen, loose, or detached mosquito bodies on the table, platform, floor, ground, product base, or any surrounding surface; dead captured mosquitoes remain attached to the adhesive face. Zero captured mosquitoes are allowed on any non-adhesive face, board edge, baffle, cover, light, product housing, wall, socket plate, nearby furniture, floor, or surrounding air. Preserve the real board orientation and original product camera angle; never rotate, front-face, side-face, open, separate, flip, or re-pose the product merely to expose more adhesive area. If only a small adhesive area is visible, show fewer captured mosquitoes only inside that area. If no adhesive face is visible, show no already-captured mosquito rather than inventing a visible glue face. Subtle Demonstration shows minimal capture evidence. Clearly Visible Glue Capture makes several captures readable only when enough real adhesive area is visible. Capture Process Demonstration may show one incoming mosquito approaching the explicitly mapped adhesive face, but every already-captured mosquito remains attached and no graphic path is allowed. Every output prompt for Glue Board method must contain an Adhesive Face Map section stating the board part, adhesive side(s), visible adhesive region(s), non-adhesive forbidden surfaces, and any conditional occlusion relationship. Keep captured insects small, clean, separated, and non-graphic, with no gore, body-detail pile, or disgusting close-up.",
+        "Glue Board method — universal adhesive-face map lock: first build an explicit Adhesive Face Map only from the user's prompt, role description, product image, or annotated diagram: identify the exact physical glue-board part; whether adhesive exists on the front face only, rear face only, both faces, or another explicitly marked surface; which adhesive faces are actually visible from the locked source viewpoint; and whether a separate baffle, cover, light, housing, or spacer exists in front of or behind the board. User labels are authoritative and override visual guessing. Never infer adhesive from board color, transparency, material, shape, brightness, or proximity to the light. ADHESIVE IS A SURFACE PROPERTY, NOT A VISIBLE BORDER: words such as adhesive, sticky, glue board, double-sided adhesive, 粘胶, 双面胶, or 双面粘胶 describe which flat face can capture insects. They do not authorize any visible glue bead, glue rim, gel edge, adhesive border, tape strip, raised lip, transparent outline, glossy frame, thick seam, or extra layer around the board. If the source images do not visibly contain such an edge, render none. Preserve the board's exact original clean contour, edge thickness, corner shape, surface color, and relationship to nearby parts. A single-sided board accepts captured mosquitoes only on its explicitly marked adhesive side. A double-sided board accepts captured mosquitoes on either adhesive side, but only where that side is genuinely visible or exposed from the unchanged source view; do not show insects through an opaque board. If the product has no baffle, never invent one. If it has a baffle or cover, preserve the exact annotated depth order and occlusion, and never treat that non-adhesive part as sticky. Captured mosquitoes on the glue board may be alive, immobilized, or dead according to the scene, but every captured body must physically touch and lie flat on an explicitly adhesive surface in the Adhesive Face Map, with body and legs aligned to that surface plane. Glue Board mode must contain ZERO fallen, loose, or detached mosquito bodies on the table, platform, floor, ground, product base, or any surrounding surface; dead captured mosquitoes remain attached to the adhesive face. Zero captured mosquitoes are allowed on any non-adhesive face, board edge, baffle, cover, light, product housing, wall, socket plate, nearby furniture, floor, or surrounding air. Preserve the real board orientation and original product camera angle; never rotate, front-face, side-face, open, separate, flip, or re-pose the product merely to expose more adhesive area. If only a small adhesive area is visible, show fewer captured mosquitoes only inside that area. If no adhesive face is visible, show no already-captured mosquito rather than inventing a visible glue face. Subtle Demonstration shows minimal capture evidence. Clearly Visible Glue Capture makes several captures readable only when enough real adhesive area is visible. Capture Process Demonstration may show one incoming mosquito approaching the explicitly mapped adhesive face, but every already-captured mosquito remains attached and no graphic path is allowed. Every output prompt for Glue Board method must contain an Adhesive Face Map section stating the board part, adhesive side(s), visible adhesive region(s), non-adhesive forbidden surfaces, any conditional occlusion relationship, and an explicit No Visible Glue Border rule. Keep captured insects small, clean, separated, and non-graphic, with no gore, body-detail pile, or disgusting close-up.",
         "Never show blood, crushed insects, insect body detail, piles of dead insects, dirty residue, horror imagery, aggressive danger symbols, or anything likely to cause disgust or fear.",
         "Every output prompt must include a Mosquito Safety Visual Rules section and a Mechanism Effect section."
       ]
@@ -545,6 +577,7 @@ function buildSceneDirectorInstruction(body: SceneDirectorRequest, images: Array
     "Every prompt must include a Scene Integration section: the product must look physically present in the scene, not pasted onto the background.",
     "Scene Integration must require matching scene lighting direction, color temperature, contrast, exposure, shadow softness, contact shadows, ambient occlusion, surface reflections, bounce light, local color spill, correct grounding, correct scale, and natural occlusion.",
     "Scene Integration must explicitly forbid cutout edges, halo, flat studio lighting, isolated white-background look, and product/background mismatch.",
+    "For every wall-plug product, physical insertion is a mandatory pass/fail condition. The connected user Prompt is the sole highest-priority authority for the socket type: use exactly its stated Chinese, European, American/US, British/UK, or other standard; never auto-detect or override it from images. Fully insert every blade/pin/prong including any grounding pin, hide the occupied socket behind the product, and make the rear/base contact the faceplate. Reject any socket standard different from the Prompt, missing or invented pin, visible conductive pin section, gap, hovering placement, side-by-side placement, or invented adapter. This physical connection overrides exact source-angle locking: permit only the minimum whole-product rotation and perspective adjustment required for real insertion, while preserving product design, proportions, materials, parts, and plug geometry.",
     "Each prompt must contain clear camera language, for example focal length, perspective, depth of field, and an explicit instruction to maintain the exact original viewing angle.",
     "Each prompt must contain clear lighting language and a scene concept.",
     "Never remove image references. Never replace references with vague phrases like 'the first image'.",
@@ -596,9 +629,26 @@ function applyDimensionFactsToSchemes(schemes: SceneDirectorScheme[], facts: Dim
   });
 }
 
-function isBadScenePrompt(prompt: string, params?: Record<string, string>, dimensionFacts: DimensionFact[] = []) {
+function applyUserImageDefinitionsToSchemes(schemes: SceneDirectorScheme[], instruction: string) {
+  const definitions = extractUserImageDefinitions(instruction);
+  if (!definitions.size) return schemes;
+  const marker = "Connected Prompt Image Definitions (authoritative):";
+  const rows = [...definitions.entries()].map(([label, clauses]) => `- ${label}: ${clauses.join("; ")}`);
+  const section = [
+    marker,
+    ...rows,
+    "These definitions come directly from the connected user Prompt. Preserve every listed image number and its stated purpose. Do not omit, merge, reassign, or replace these roles."
+  ].join("\n");
+  return schemes.map((scheme) => ({
+    ...scheme,
+    prompt: scheme.prompt.includes(marker) ? scheme.prompt : `${scheme.prompt.trim()}\n\n${section}`
+  }));
+}
+
+function isBadScenePrompt(prompt: string, params?: Record<string, string>, dimensionFacts: DimensionFact[] = [], requiredImageLabels: string[] = []) {
   if (prompt.length < 100) return true;
   if (!/<Image\d{3}>/.test(prompt)) return true;
+  if (requiredImageLabels.some((label) => !prompt.includes(label))) return true;
   const productLock = normalizeOption(params?.productLock, "Strict", { 严格: "Strict", 灵活: "Flexible" });
   const cameraLock = normalizeOption(params?.cameraLock, "Strict", { 严格: "Strict", 灵活: "Flexible" });
   const requiredSignals = [
@@ -641,6 +691,7 @@ export async function POST(request: NextRequest) {
     const planningModel = getSceneDirectorPlanningModel(model);
     const schemeCount = normalizeSchemeCount(body.params?.schemes);
     const dimensionFacts = extractDimensionFacts(instruction);
+    const requiredImageLabels = [...extractUserImageDefinitions(instruction).keys()];
     const instructionText = buildSceneDirectorInstruction(body, images);
     const imageParts = await Promise.all(images.map(async (image, index) => {
       const number = Number.isInteger(image.imageNumber) ? image.imageNumber : index + 1;
@@ -719,15 +770,18 @@ export async function POST(request: NextRequest) {
       if (!lastResponseOk) break;
 
       const outputText = candidateText || getChatCompletionText(lastPayload) || getCandidateText(lastPayload);
-      schemes = applyDimensionFactsToSchemes(parseSchemes(outputText, schemeCount), dimensionFacts);
-      if (schemes.length === schemeCount && schemes.every((scheme) => !isBadScenePrompt(scheme.prompt, body.params, dimensionFacts))) break;
+      schemes = applyUserImageDefinitionsToSchemes(
+        applyDimensionFactsToSchemes(parseSchemes(outputText, schemeCount), dimensionFacts),
+        instruction
+      );
+      if (schemes.length === schemeCount && schemes.every((scheme) => !isBadScenePrompt(scheme.prompt, body.params, dimensionFacts, requiredImageLabels))) break;
     }
 
     if (!lastResponseOk) {
       return NextResponse.json({ error: formatProviderError(planningModel, lastPayload, lastStatus) }, { status: lastStatus });
     }
-    schemes = applyDimensionFactsToSchemes(schemes, dimensionFacts);
-    if (schemes.length !== schemeCount || schemes.some((scheme) => isBadScenePrompt(scheme.prompt, body.params, dimensionFacts))) {
+    schemes = applyUserImageDefinitionsToSchemes(applyDimensionFactsToSchemes(schemes, dimensionFacts), instruction);
+    if (schemes.length !== schemeCount || schemes.some((scheme) => isBadScenePrompt(scheme.prompt, body.params, dimensionFacts, requiredImageLabels))) {
       return NextResponse.json({ error: `Scene Director 输出没有满足 Schemes=${schemeCount} 要求，请重试。` }, { status: 502 });
     }
 

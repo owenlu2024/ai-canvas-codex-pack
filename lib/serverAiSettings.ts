@@ -62,8 +62,14 @@ export async function readApiSettings(settingsPath: string, options: ReadSetting
 
   const parsed = parseConfiguredModelId(options.model);
   const isAgnes = Boolean(options.isAgnesModel?.(parsed.modelId));
-  const selectedClientSource = parsed.apiId ? options.clientSettings?.apiConfigs?.find((config) => config.id === parsed.apiId) : undefined;
-  const selectedSource = parsed.apiId ? saved.apiConfigs?.find((config) => config.id === parsed.apiId) : undefined;
+  const selectedClientSource = parsed.apiId
+    ? options.clientSettings?.apiConfigs?.find((config) => config.id === parsed.apiId)
+      ?? (parsed.apiId === "001" ? options.clientSettings?.settings : parsed.apiId === "002" ? options.clientSettings?.agnesSettings : undefined)
+    : undefined;
+  const selectedSource = parsed.apiId
+    ? saved.apiConfigs?.find((config) => config.id === parsed.apiId)
+      ?? (parsed.apiId === "001" ? saved.settings : parsed.apiId === "002" ? saved.agnesSettings : undefined)
+    : undefined;
   const clientSource = selectedClientSource ?? (isAgnes ? options.clientSettings?.agnesSettings : options.clientSettings?.settings);
   const source = selectedSource ?? (isAgnes ? saved.agnesSettings : saved.settings);
   const envSettings = readEnvApiSettings(options);

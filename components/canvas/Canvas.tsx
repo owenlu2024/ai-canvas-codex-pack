@@ -54,6 +54,7 @@ const nodeTypes = {
   visual_director: MultiGenerateNode,
   multiGenerate: MultiGenerateNode,
   generateImage: MultiGenerateNode,
+  imageTextEditor: MultiGenerateNode,
   hdRedraw: MultiGenerateNode,
   hdRedraw2: MultiGenerateNode,
   rhinoTest: MultiGenerateNode,
@@ -514,7 +515,7 @@ export function AiCanvas() {
   const sortedNodes = useMemo(() => [...nodes].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)), [nodes]);
   const visibleEdges = useMemo(() => (showAutoImageLinks ? edges : edges.filter((edge) => !isAutoMentionImageEdge(edge))), [edges, showAutoImageLinks]);
   const promptEditorNode = useMemo(
-    () => promptEditor ? nodes.find((node) => node.id === promptEditor.nodeId && node.data.kind === "prompt") : undefined,
+    () => promptEditor ? nodes.find((node) => node.id === promptEditor.nodeId && (node.data.kind === "prompt" || node.data.kind === "imageTextEditor")) : undefined,
     [nodes, promptEditor]
   );
   const readableZoomFloor = getReadableZoomFloor(displayScale);
@@ -577,7 +578,7 @@ export function AiCanvas() {
     const onOpenPromptEditor = (event: Event) => {
       const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
       if (!nodeId) return;
-      const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId && item.data.kind === "prompt");
+      const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId && (item.data.kind === "prompt" || item.data.kind === "imageTextEditor"));
       if (!node) return;
       openPromptEditor(node);
     };
@@ -760,7 +761,7 @@ export function AiCanvas() {
 
   useEffect(() => {
     if (!promptEditor) return;
-    const nodeStillExists = nodes.some((node) => node.id === promptEditor.nodeId && node.data.kind === "prompt");
+    const nodeStillExists = nodes.some((node) => node.id === promptEditor.nodeId && (node.data.kind === "prompt" || node.data.kind === "imageTextEditor"));
     if (!nodeStillExists) setPromptEditor(null);
   }, [nodes, promptEditor]);
 

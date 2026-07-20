@@ -40,6 +40,7 @@ const categories: AddNodeCategory[] = [
     ],
     imageOptions: [
       { kind: "generateImage", label: "Generate Image", description: "AI 成图" },
+      { kind: "imageTextEditor", label: "图片文字修改", description: "提取并修改图片文字" },
       { kind: "hdRedraw", label: "高清重绘1", description: "生成 B 图和 A Prompt" },
       { kind: "hdRedraw2", label: "高清重绘2", description: "生成 C 高清图" }
     ]
