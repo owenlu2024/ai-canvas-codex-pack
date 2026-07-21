@@ -1967,7 +1967,9 @@ function ProductRetouchPanel({ id, data }: { id: string; data: CanvasNodeData })
     highlightControl: "柔和",
     imageCount: "1",
     mosquitoWavelength: "395 nm｜标准紫光",
+    productCastShadow: "柔和",
     productLock: "严格",
+    productPosition: "落地",
     shadowStrength: "柔和",
     studioLighting: "高调柔光",
     ...(data.modelParams ?? {})
@@ -2013,6 +2015,8 @@ function ProductRetouchPanel({ id, data }: { id: string; data: CanvasNodeData })
         <GenerateSelect dense disabled={locked} label="高光控制" menuAlign="right" onChange={(value) => updateParam("highlightControl", value)} options={["柔和", "标准", "清晰", "高级镜面高光"]} value={params.highlightControl} />
         <GenerateSelect dense disabled={locked} label="色温" onChange={(value) => updateParam("colorTemperature", value)} options={["自动", "冷白", "中性", "暖白"]} value={params.colorTemperature} />
         <GenerateSelect dense disabled label="产品锁定" menuAlign="right" onChange={() => undefined} options={["严格"]} value={params.productLock} />
+        <GenerateSelect dense disabled={locked} label="产品位置" onChange={(value) => updateParam("productPosition", value)} options={["漂浮", "悬空", "落地", "贴墙面"]} value={params.productPosition} />
+        <GenerateSelect dense disabled={locked} label="产品投影" menuAlign="right" onChange={(value) => updateParam("productCastShadow", value)} options={["无", "柔和", "强硬"]} value={params.productCastShadow} />
       </div>
     </div>
   );

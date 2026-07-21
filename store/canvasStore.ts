@@ -1023,14 +1023,15 @@ function getImageRoleFromPrompt(prompt: string, imageNumber: number) {
   const escapedToken = imageToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const mentionPattern = new RegExp(`(?:<\\s*Image\\s*${escapedToken}\\s*>|@\\s*(?:Image\\s*)?0*${imageNumber}\\b|\\bImage\\s*0*${imageNumber}\\b)`, "i");
   const explicitStyleLabels = getStyleReferenceLabelsFromPrompt(prompt);
-  const matchedLines = prompt.split(/\r?\n/).filter((line) => mentionPattern.test(line));
-  const matchedLine = matchedLines[0] ?? "";
-  const segment = matchedLine
-    .split(/[,，;；、]/)
-    .find((part) => mentionPattern.test(part))
-    ?.trim() ?? "";
-  const matchIndex = prompt.search(mentionPattern);
-  const context = segment || (matchIndex >= 0 ? prompt.slice(Math.max(0, matchIndex - 80), matchIndex + 140) : "");
+  const currentMention = mentionPattern.exec(prompt);
+  const contextStart = currentMention?.index ?? -1;
+  const afterCurrentMention = contextStart >= 0 && currentMention
+    ? contextStart + currentMention[0].length
+    : -1;
+  const remainingContext = afterCurrentMention >= 0 ? prompt.slice(afterCurrentMention, afterCurrentMention + 260) : "";
+  const nextMentionOffset = remainingContext.search(/(?:<\s*Image\s*\d+\s*>|@\s*(?:Image\s*)?\d+\b|\bImage\s*\d+\b)/i);
+  const contextEnd = nextMentionOffset >= 0 ? afterCurrentMention + nextMentionOffset : afterCurrentMention + remainingContext.length;
+  const context = contextStart >= 0 ? prompt.slice(contextStart, contextEnd).trim() : "";
   if (/主图|主产品|main\s*product|hero\s*product|primary\s*product|product\s*(?:identity\s*)?source|identity\s*source|商品主体|产品主体/i.test(context)) return "main";
   if (explicitStyleLabels.includes(`<Image${imageToken}>`)) return "style";
   if (/结构|structure|造型|形体|geometry/i.test(context)) return "structure";
@@ -1471,26 +1472,52 @@ function compactConnectedPromptOnly(prompt: string, budget: number) {
 function buildProductRetouchPrompt(userPrompt: string, params: Record<string, string>, modelId?: string) {
   const wavelength = params.mosquitoWavelength ?? "395 nm｜标准紫光";
   const lightOff = wavelength === "无｜灯光关闭";
+  const productPosition = params.productPosition ?? "落地";
+  const productCastShadow = params.productCastShadow ?? "柔和";
   const wavelengthRule = lightOff
     ? "ATTRACTION LIGHT OFF: the real attraction lamp/light chamber emits zero violet or blue-violet light. Add no product-originated purple glow, bloom, spill, reflection, or illuminated strip."
     : `ATTRACTION LIGHT PRINCIPLE: selected wavelength is ${wavelength}. Only the product's real existing attraction-light panel, lamp chamber, or emitter visible in the Main Product may emit light. Keep the selected hue consistent across the emitter, nearby product reflections, background spill, and contact surface. Never invent an LED strip, extra lamp, glowing border, fantasy energy, laser beam, or room-filling purple wash. Studio lighting remains physically independent from the functional attraction light.`;
+  const positionRule = productPosition === "漂浮"
+    ? "PRODUCT POSITION — FLOATING (ABSOLUTE): isolate only the physical product body from the Main Product image. Explicitly exclude and erase the Main Product image's original background, floor, tabletop, base plane, contact shadow, cast shadow, drop shadow, ambient-occlusion patch, gray footprint, and surface reflection; none of these are part of the product asset. Place the clean shadow-free product body clearly floating in open space with a visible empty gap around and below it. There must be no floor, tabletop, platform, wall, pedestal, hook, wire, bracket, socket, or other support touching or visually supporting the product. Generate absolutely zero new contact shadow, cast shadow, drop shadow, ambient-occlusion shadow, reflected shadow, dark grounding patch, gray footprint, or surface reflection beneath or behind the product. The result must read unmistakably as free floating, not grounded and not slightly suspended."
+    : productPosition === "悬空"
+      ? "PRODUCT POSITION — SLIGHTLY SUSPENDED: place the product only a small visible distance above the floor or tabletop. It must not touch the surface. Preserve a physically consistent shadow on the surface below so the slight elevation is clear; do not make it float high in open space."
+      : productPosition === "贴墙面"
+        ? "PRODUCT POSITION — WALL-MOUNTED: place the product flush against or correctly installed on the wall, never floating in front of it. Put any physically caused shadow on the wall. If the Main Product has plug pins and the connected Prompt requires socket installation, insert the pins correctly into the matching wall socket with no duplicate product."
+        : "PRODUCT POSITION — GROUNDED: place the product stably in direct contact with the floor, tabletop, or supporting surface. Add physically correct contact grounding and never leave a floating gap.";
+  const castShadowRule = productPosition === "漂浮"
+    ? "PRODUCT CAST SHADOW — NONE (forced by Floating): the position setting overrides every other shadow setting. The product must produce no visible shadow anywhere."
+    : productPosition === "悬空" && productCastShadow === "无"
+      ? "PRODUCT CAST SHADOW — MINIMAL POSITIONING SHADOW: do not add a prominent commercial cast shadow, but preserve a very faint physically consistent shadow on the surface below. This subtle shadow is mandatory to show that the product is only slightly suspended rather than floating freely."
+    : productCastShadow === "无"
+      ? "PRODUCT CAST SHADOW — NONE: generate no distinct product cast shadow. Keep only the minimum contact or ambient occlusion required to prevent a pasted cutout appearance when the product touches a surface."
+      : productCastShadow === "强硬"
+        ? "PRODUCT CAST SHADOW — HARD: generate a physically plausible directional product shadow with a clearly defined, relatively hard edge. Its direction and perspective must match the studio light and receiving surface."
+        : "PRODUCT CAST SHADOW — SOFT: generate a physically plausible soft, naturally diffused product shadow with smooth feathered edges. Its direction and perspective must match the studio light and receiving surface.";
   const fixedBefore = [
     "DAYANG MOSQUITO-LAMP PRODUCT RETOUCH — STRICT IMAGE EDITING.",
     "REFERENCE ROLE PRIORITY: the connected user Prompt is the highest authority for assigning each <Image###> role. The Main Product image is the only product identity source. Every other image is background, gradient, color, studio-lighting, shadow, surface, or mood reference only according to the Prompt.",
     "PRODUCT IMMUTABILITY LOCK: preserve the exact same product identity, exterior design, silhouette, geometry, dimensions, proportions, camera angle, yaw, pitch, roll, perspective, visible-face ratios, crop relationship, color blocks, materials, texture layout, logo, printed text, markings, buttons, openings, vents, mesh, attraction-light panel, glue board, plug, socket-facing geometry, seams, edges, thicknesses, and every visible component.",
+    "PRODUCT GEOMETRY AND MATERIAL-IDENTITY LOCK WITH RELIGHTING: preserve the Main Product's exact physical design, silhouette, geometry, proportions, angle, perspective, part layout, material type, base color, surface texture, graphics, logo, and markings, but allow the new environment and selected studio setup to relight that unchanged product naturally. New illumination may change only physically plausible brightness distribution, exposure, highlight intensity and position, reflection intensity, edge light, color temperature, white balance, and restrained environmental color spill. These lighting responses must conform to the original material: matte remains matte, plastic remains plastic, metal remains the same metal, and the base color remains unchanged. Source-image background, floor, tabletop, support plane, contact shadow, cast shadow, ambient occlusion outside the product contour, and surface reflection are environmental pixels rather than product identity. Isolate the exact product body without those environmental pixels, then integrate and relight it in the requested environment. Never reconstruct, restyle, approximate, or redesign the product body.",
+    "MATERIAL RESPONSE LOCK: preserve the Main Product's exact base material identity and surface response, including roughness, gloss level, metalness, translucency, opacity, coating, grain, microtexture, diffusion, reflection strength, highlight width, and highlight falloff. Reference lighting may illuminate the existing material but must never make matte plastic look metallic, glossy, chrome, pearlescent, translucent, coated, or differently colored. Never transfer a reference object's material or specular response onto the Main Product.",
+    "BRANDING AND SILKSCREEN ZERO-ADDITION LOCK: preserve only logos, brand names, letters, words, numbers, icons, symbols, certification marks, labels, scales, button legends, warning marks, and decorative printing that are visibly present on the Main Product image, in the exact same locations and appearance. Never invent, autocomplete, enhance, rewrite, duplicate, relocate, or add any logo, text, pseudo-text, tiny lettering, watermark, badge, emblem, serial mark, regulatory mark, or silkscreen. Every product region that is blank or unprinted in the Main Product must remain completely blank and unprinted in the result. Text, logos, and markings visible on any reference image belong to that reference object only and must never transfer to the Main Product.",
     "Do not rotate, mirror, tilt, straighten, front-face, side-face, redraw, remodel, beautify, simplify, replace, recolor, relabel, add, delete, merge, move, resize, or reinterpret any product part. Adapt the background, ground plane, crop, shadows, and studio lighting around the fixed product projection.",
     "ALLOWED RETOUCH ONLY: change the surrounding background; refine illumination falling onto the existing product; adjust physically caused exposure, highlight, reflection, contrast, white balance, color spill, contact shadow, cast shadow, ambient occlusion, and edge integration. Lighting may reveal existing materials but must not change their identity, base color, finish, graphics, or geometry.",
-    "REFERENCE ISOLATION: never copy a product, person, text, logo, package, prop, or foreground object from any background/lighting reference. Extract only the exact visual attributes assigned by the user Prompt, such as background color, gradient direction, brightness, seamless sweep, surface, main-light direction, softbox character, rim light, highlight shape, shadow direction, softness, and atmosphere.",
+    "REFERENCE ISOLATION: a background or lighting reference may contain another product or prominent foreground object. Ignore, mask out, and never copy its complete foreground subject, silhouette, geometry, materials, colors, parts, highlights, or reflections. Extract only the exact non-product visual attributes assigned by the user Prompt, such as background color, gradient direction, brightness, seamless sweep, empty surface, main-light direction, softbox character, shadow direction, softness, and atmosphere.",
     "ONE-PRODUCT LOCK: render exactly one Main Product. No duplicate, alternate pose, detached copy, reflected duplicate, packaging copy, poster copy, screen copy, or background product.",
-    "EDGE AND GROUNDING LOCK: no white cutout halo, gray fringe, glue-like rim, transparent border, raised gel edge, pasted edge, jagged mask, floating gap, or invented pedestal. Preserve clean real edges and ground the product with physically correct contact shadow and ambient occlusion unless the original product is explicitly suspended.",
+    `EDGE AND PLACEMENT LOCK: no white cutout halo, gray fringe, glue-like rim, transparent border, raised gel edge, pasted edge, jagged mask, or invented pedestal. Preserve clean real edges. Follow the selected Product position (${productPosition}) exactly; allow a visible surface gap only for 漂浮 or 悬空, and ground or wall-mount the product correctly for the other positions.`,
     "Do not add mosquitoes, dead insects, trajectories, electric arcs, suction graphics, mechanism diagrams, people, hands, pets, promotional text, captions, badges, or watermarks unless the connected Prompt explicitly requires them.",
     wavelengthRule,
-    `NODE RETOUCH SETTINGS: Background = ${params.backgroundMode ?? "按 Prompt / 参考图"}; Studio lighting = ${params.studioLighting ?? "高调柔光"}; Shadow strength = ${params.shadowStrength ?? "柔和"}; Highlight control = ${params.highlightControl ?? "柔和"}; Color temperature = ${params.colorTemperature ?? "中性"}. The connected Prompt overrides these choices when it explicitly states a different background or lighting requirement.`,
+    positionRule,
+    castShadowRule,
+    `NODE RETOUCH SETTINGS: Background = ${params.backgroundMode ?? "按 Prompt / 参考图"}; Studio lighting = ${params.studioLighting ?? "高调柔光"}; Shadow strength = ${params.shadowStrength ?? "柔和"}; Highlight control = ${params.highlightControl ?? "柔和"}; Color temperature = ${params.colorTemperature ?? "中性"}; Product position = ${productPosition}; Product cast shadow = ${productPosition === "漂浮" ? "无（漂浮强制）" : productCastShadow}. The connected Prompt overrides background or lighting choices only when it explicitly states a different requirement; the node's Product position and Product cast shadow selections remain mandatory.`,
     "CONNECTED USER PROMPT — preserve its image-role definitions and execute its explicit background and lighting requirements:"
   ].join("\n\n");
   const fixedAfter = [
-    "FINAL VERIFICATION: compare the result against the Main Product image before returning it. Reject and correct any change in product structure, angle, perspective, visible faces, proportions, materials, base colors, parts, labels, logo, light-panel position, glue-board position, plug geometry, or feature layout.",
-    "Verify that background and lighting references influenced only their assigned attributes, the selected attraction-light principle is physically correct, studio lighting is independent, exactly one unchanged product remains, and there is no halo, glue edge, floating gap, duplicate, invented light source, or unrequested insect/effect.",
+    "FINAL PRODUCT-IDENTITY VERIFICATION AFTER RELIGHTING: compare the result against the Main Product while ignoring only legitimate illumination differences. Reject and correct the result if the product silhouette, outer contour, internal edges, angle, perspective, visible faces, proportions, material identity, base colors, surface texture, parts, labels, logo, light-panel position, glue-board position, plug geometry, or feature layout differs in any way. Confirm that changed highlights, reflections, brightness, edge light, and color spill are physically caused by the requested environment and do not alter material type, finish, texture, graphics, or base color. Perform a region-by-region branding and print comparison: remove every output logo, letter, number, symbol, pseudo-text, label, certification mark, or silkscreen that has no exact counterpart in the same region of the Main Product. Blank source regions must remain blank. Background-reference foreground objects must have zero influence on the product.",
+    productPosition === "漂浮"
+      ? "FINAL FLOATING VERIFICATION — SOURCE-AND-NEW ZERO-SHADOW GATE: compare the result with the Main Product source and identify the source image's original ground shadow separately from the product body. Confirm that the original source shadow was removed rather than transferred. Then inspect every area below, beside, and behind the product. If any retained source shadow, new contact shadow, cast shadow, drop shadow, ambient-occlusion patch, dark footprint, reflected silhouette, supporting plane, or surface reflection exists, reject and correct the image before returning it."
+      : "FINAL PLACEMENT VERIFICATION: confirm that product contact, support, and shadow behavior match the selected Product position.",
+    `Verify that background and lighting references influenced only their assigned attributes, the selected attraction-light principle is physically correct, studio lighting is independent, exactly one unchanged product remains, the selected Product position (${productPosition}) and cast-shadow behavior are correct, and there is no halo, glue edge, unintended floating gap, duplicate, invented light source, or unrequested insect/effect.`,
     "Return only the finished commercial product retouch image."
   ].join("\n\n");
   if (getBaseModelId(modelId) !== "gpt-image-2") return `${fixedBefore}\n\n${userPrompt.trim()}\n\n${fixedAfter}`;
@@ -1507,10 +1534,12 @@ function buildProductRetouchReferenceManifest(referenceImages: Node<CanvasNodeDa
       const label = `<Image${String(imageNumber).padStart(3, "0")}>`;
       const role = referenceImages.length === 1 ? "main" : getImageRoleFromPrompt(rolePrompt, imageNumber);
       return role === "main"
-        ? `- Attached image ${index + 1} = ${label}: MAIN PRODUCT. This is the exact immutable mosquito-lamp product asset and the only source for product appearance, structure, angle, perspective, materials, colors, markings, and components.`
-        : `- Attached image ${index + 1} = ${label}: REFERENCE ONLY. Follow the precise role assigned in the connected Prompt. Use only its background, gradient, color, studio-lighting, shadow, surface, or mood attributes; ignore and never copy any product, person, text, logo, packaging, or foreground object.`;
+        ? `- Attached image ${index + 1} = ${label}: MAIN PRODUCT — GEOMETRY AND MATERIAL-IDENTITY LOCKED, RELIGHTING ALLOWED. This is the only source for product design, structure, silhouette, angle, perspective, material type, base colors, surface texture, markings, and components. Preserve all of those exactly while allowing the requested environment to create physically plausible new brightness, highlights, reflections, edge light, color temperature, and restrained color spill on the unchanged materials. The image's background, support surface, original contact/cast shadow, ambient occlusion outside the product contour, and reflection are environmental reference pixels rather than product identity and may be removed or replaced according to the selected placement and shadow settings. Do not redraw or redesign the product body.`
+        : role === "scene"
+          ? `- Attached image ${index + 1} = ${label}: BACKGROUND AND LIGHTING REFERENCE — HIGH FIDELITY. Reproduce its observable non-product background color, brightness, tonal range, gradient or falloff, empty-space distribution, surface/background relationship, light direction, key-to-fill ratio, contrast, hardness or softness, rim-light behavior, shadow direction, and overall exposure so the reference influence is clearly recognizable. BACKGROUND COLOR LOCK: preserve the reference's actual dominant background tone. If the reference background is white or near-white, the result must remain white or near-white; never darken it into gray, silver, charcoal, black, or a dramatic vignette merely to increase product contrast. Do not invent a gray gradient when the reference is evenly white. Ignore and remove the reference image's product or foreground object completely. Never transfer that object's silhouette, geometry, color, material, metalness, gloss, highlight pattern, reflection response, logo, brand name, text, number, symbol, label, certification mark, or silkscreen onto the Main Product.`
+        : `- Attached image ${index + 1} = ${label}: REFERENCE ONLY. Follow the precise role assigned in the connected Prompt. If this image contains a product or foreground object, discard that entire subject and all of its visual attributes. Use only its background, gradient, color, studio-lighting, empty surface, shadow character, or mood; never copy any product, silhouette, geometry, material, highlight, person, text, logo, packaging, or foreground object.`;
     }),
-    "When the connected Prompt assigns a role, that assignment overrides attachment order and all automatic assumptions. No reference image may alter or replace the Main Product."
+    "When the connected Prompt assigns a role, that assignment overrides attachment order and all automatic assumptions. No reference image may alter or replace the Main Product. A declared background or lighting reference is mandatory visual direction, not optional inspiration: its background and illumination characteristics must remain clearly recognizable in the result while its foreground subject has zero influence on the Main Product."
   ].join("\n");
 }
 
@@ -2780,7 +2809,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           : kind === "sceneImage" || kind === "mosquitoSceneImage"
             ? { modelId: defaultSceneImageModelId, modelParams: getDefaultSceneImageParams(defaultSceneImageModelId), ...data }
             : kind === "productRetouch"
-              ? { modelId: defaultSceneImageModelId, modelParams: { ...getDefaultSceneImageParams(defaultSceneImageModelId), backgroundMode: "按 Prompt / 参考图", colorTemperature: "中性", highlightControl: "柔和", imageCount: "1", mosquitoWavelength: "395 nm｜标准紫光", productLock: "严格", shadowStrength: "柔和", studioLighting: "高调柔光" }, ...data }
+              ? { modelId: defaultSceneImageModelId, modelParams: { ...getDefaultSceneImageParams(defaultSceneImageModelId), backgroundMode: "按 Prompt / 参考图", colorTemperature: "中性", highlightControl: "柔和", imageCount: "1", mosquitoWavelength: "395 nm｜标准紫光", productCastShadow: "柔和", productLock: "严格", productPosition: "落地", shadowStrength: "柔和", studioLighting: "高调柔光" }, ...data }
             : kind === "industrialDesignImage"
               ? { modelId: defaultIndustrialDesignImageModelId, modelParams: getDefaultIndustrialDesignImageParams(defaultIndustrialDesignImageModelId), ...data }
               : kind === "productRemix"
@@ -3377,6 +3406,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       : { included: allReferenceImages, omitted: [] as Node<CanvasNodeData>[] };
     let referenceImages = isRhinoTestNode
       ? orderRhinoReferenceImages(preparedReferenceImages.included, rhinoPrimaryReferenceImage)
+      : isProductRetouchNode
+        ? orderReferenceImagesForPrompt(preparedReferenceImages.included, rolePrompt)
       : preparedReferenceImages.included;
     const textLayoutStyleReferenceImages = isTextImageLayoutNode ? getTextImageLayoutStyleReferenceImages(referenceImages, rolePrompt) : [];
     const textLayoutVerifiedStyleLabels = textLayoutStyleReferenceImages.map((node, index) => {
