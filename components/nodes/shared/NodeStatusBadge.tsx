@@ -10,17 +10,17 @@ const statusLabels: Record<RunState, string> = {
 };
 
 const statusClasses: Record<RunState, string> = {
-  completed: "border-[#BDEBD1] bg-[#F1FBF5] text-[#16834B]",
-  failed: "border-[#FFD0D1] bg-[#FFF5F5] text-danger",
-  idle: "border-[#E5E9F2] bg-[#F7F9FC] text-secondary",
-  running: "border-[#D9D7FF] bg-[#F3F2FF] text-selected"
+  completed: "border-[rgba(36,138,61,0.18)] bg-[rgba(36,138,61,0.08)] text-[var(--success)]",
+  failed: "border-[rgba(215,0,21,0.16)] bg-[rgba(215,0,21,0.07)] text-danger",
+  idle: "border-[var(--node-border)] bg-[var(--surface-subtle)] text-secondary",
+  running: "border-[rgba(108,99,255,0.18)] bg-[var(--selected-soft)] text-selected"
 };
 
 export function NodeStatusBadge({ runState }: { runState?: RunState }) {
   const state = runState ?? "idle";
 
   return (
-    <span className={`inline-flex h-6 items-center rounded-full border px-2.5 text-[11px] font-bold leading-none ${statusClasses[state]}`}>
+    <span className={`inline-flex h-[22px] items-center rounded-full border px-2.5 text-[11px] font-semibold leading-[14px] tracking-[0.01em] ${statusClasses[state]}`}>
       {statusLabels[state]}
     </span>
   );

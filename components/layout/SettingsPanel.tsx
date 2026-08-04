@@ -150,8 +150,8 @@ export function SettingsPanel() {
     const width = rect?.width ?? 380;
     const height = rect?.height ?? 360;
     return {
-      x: Math.min(Math.max(88, position.x), Math.max(88, window.innerWidth - width - 16)),
-      y: Math.min(Math.max(84, position.y), Math.max(84, window.innerHeight - height - 16))
+      x: Math.min(Math.max(8, position.x), Math.max(8, window.innerWidth - width - 8)),
+      y: Math.min(Math.max(8, position.y), Math.max(8, window.innerHeight - height - 8))
     };
   }, []);
 
@@ -338,7 +338,7 @@ export function SettingsPanel() {
   return (
     <aside
       aria-label="设置"
-      className="pointer-events-auto absolute z-50 flex min-w-[320px] max-w-[520px] flex-col rounded-[18px] border border-line bg-white/95 shadow-[0_20px_56px_rgba(15,23,42,0.14)] backdrop-blur"
+      className="pointer-events-auto fixed z-[2147483002] flex min-w-[320px] max-w-[520px] flex-col rounded-[18px] border border-line bg-white/95 shadow-[0_20px_56px_rgba(15,23,42,0.14)] backdrop-blur"
       ref={panelRef}
       style={{
         left: panelPosition ? panelPosition.x : undefined,

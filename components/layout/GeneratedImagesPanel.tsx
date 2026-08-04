@@ -93,8 +93,8 @@ export function GeneratedImagesPanel() {
     const width = rect?.width ?? 380;
     const height = rect?.height ?? Math.min(620, window.innerHeight - 132);
     return {
-      x: Math.min(Math.max(88, position.x), Math.max(88, window.innerWidth - width - 16)),
-      y: Math.min(Math.max(84, position.y), Math.max(84, window.innerHeight - height - 16))
+      x: Math.min(Math.max(8, position.x), Math.max(8, window.innerWidth - width - 8)),
+      y: Math.min(Math.max(8, position.y), Math.max(8, window.innerHeight - height - 8))
     };
   }, []);
 
@@ -182,7 +182,7 @@ export function GeneratedImagesPanel() {
     <>
       <aside
         aria-label="AI 返图备份"
-        className="pointer-events-auto absolute z-50 flex min-w-[320px] max-w-[560px] flex-col rounded-[18px] border border-line bg-white/95 shadow-[0_20px_56px_rgba(15,23,42,0.14)] backdrop-blur"
+        className="pointer-events-auto fixed z-[2147483002] flex min-w-[320px] max-w-[560px] flex-col rounded-[18px] border border-line bg-white/95 shadow-[0_20px_56px_rgba(15,23,42,0.14)] backdrop-blur"
         ref={panelRef}
         style={{
           height: "min(620px, calc(100vh - 132px))",
@@ -320,7 +320,7 @@ export function GeneratedImagesPanel() {
       {previewUrl ? (
         <button
           aria-label="关闭图片预览"
-          className="absolute inset-y-[96px] right-6 z-[60] flex min-w-[320px] max-w-[560px] items-center justify-center overflow-hidden rounded-[18px] border border-line bg-white/40 p-4 shadow-[0_20px_56px_rgba(15,23,42,0.16)] backdrop-blur-sm"
+          className="fixed inset-y-2 right-2 z-[2147483003] flex min-w-[320px] max-w-[560px] items-center justify-center overflow-hidden rounded-[18px] border border-line bg-white/40 p-4 shadow-[0_20px_56px_rgba(15,23,42,0.16)] backdrop-blur-sm"
           onClick={() => setPreviewUrl(null)}
           onMouseDown={(event) => {
             event.preventDefault();

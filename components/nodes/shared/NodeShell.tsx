@@ -29,7 +29,7 @@ export function NodeShell({ children, height, motionState, portLayer, running, s
 
   return (
     <article
-      className={`ai-node-shell relative rounded-[18px] border bg-white shadow-node transition ${
+      className={`ai-node-shell relative rounded-[18px] border bg-white ${
         running ? "ai-node-running shadow-[0_10px_30px_rgba(108,99,255,0.11)]" : ""
       } ${motionState ? `ai-node-${motionState}` : ""} ${selected ? "ai-node-selected border-selected" : "border-line hover:border-[#D9DEEA] hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"}`}
       style={{ height, width }}
@@ -41,7 +41,7 @@ export function NodeShell({ children, height, motionState, portLayer, running, s
       ) : null}
       {portLayer}
       {selected ? (
-        <span className="absolute -right-[11px] -top-[11px] z-10 grid h-6 w-6 place-items-center rounded-full bg-selected text-[13px] font-bold text-white shadow-sm">
+        <span className="absolute -right-[11px] -top-[11px] z-10 grid h-6 w-6 place-items-center rounded-full bg-selected text-[13px] font-bold text-white shadow-[0_3px_10px_rgba(108,99,255,0.28)]">
           ✓
         </span>
       ) : null}

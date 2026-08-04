@@ -33,7 +33,7 @@ export function NodeActions({
   showDownloadImage
 }: NodeActionsProps) {
   return (
-    <div className="ml-2 flex h-8 items-center gap-1">
+    <div className="ml-2 flex h-[30px] items-center gap-1">
       {showEdit ? (
         <IconActionButton
           disabled={!canEdit}
@@ -87,8 +87,8 @@ function IconActionButton({
   return (
     <button
       aria-label={label}
-      className={`grid h-8 w-8 place-items-center rounded-[8px] transition ${
-        disabled ? "text-[#B8C0CC]" : "text-primary hover:bg-[#F5F7FB]"
+      className={`apple-pressable grid h-[30px] w-[30px] place-items-center rounded-[9px] ${
+        disabled ? "text-[#AEAEB2]" : "text-primary hover:bg-[var(--surface-control)]"
       }`}
       disabled={disabled}
       onClick={(event) => {

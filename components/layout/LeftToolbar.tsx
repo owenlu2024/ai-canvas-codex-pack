@@ -61,13 +61,13 @@ function ToolbarTip({ label, visible }: { label: string; visible: boolean }) {
         transform: "translateY(-50%)",
         whiteSpace: "nowrap",
         borderRadius: 999,
-        background: "var(--selected)",
+        background: "rgba(29, 29, 31, 0.88)",
         padding: "8px 14px",
         color: "#fff",
         fontSize: 13,
         fontWeight: 500,
         lineHeight: 1,
-        boxShadow: "0 10px 24px rgba(108, 99, 255, 0.24)"
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.16)"
       }}
     >
       {label}
@@ -100,7 +100,7 @@ export function LeftToolbar() {
   return (
     <aside
       aria-label="画布工具"
-      className="pointer-events-auto fixed left-4 top-1/2 z-[2147483001] flex w-[58px] -translate-y-1/2 flex-col items-center rounded-[29px] border border-line bg-white/95 px-[7px] py-3 shadow-soft"
+      className="apple-glass pointer-events-auto fixed left-4 top-1/2 z-[2147483001] flex w-[58px] -translate-y-1/2 flex-col items-center rounded-[29px] px-[7px] py-3"
       style={{
         position: "fixed",
         left: "calc(var(--visual-viewport-left, 0px) + 16px)",
@@ -113,10 +113,12 @@ export function LeftToolbar() {
         flexDirection: "column",
         alignItems: "center",
         borderRadius: 29,
-        border: "1px solid var(--node-border)",
-        background: "rgba(255, 255, 255, 0.95)",
+        border: "1px solid rgba(255, 255, 255, 0.62)",
+        background: "var(--glass-background)",
+        WebkitBackdropFilter: "blur(22px) saturate(160%)",
+        backdropFilter: "blur(22px) saturate(160%)",
         padding: "12px 7px",
-        boxShadow: "0 18px 42px rgba(15, 23, 42, 0.10)"
+        boxShadow: "var(--floating-shadow)"
       }}
     >
       {tools.map(({ label, icon: Icon, active: isActiveTool, add, delete: isDelete }) => {
@@ -125,15 +127,15 @@ export function LeftToolbar() {
           (isDelete && selectedNodes.length < 1);
         const active = Boolean(isActiveTool) || pressedTool === label;
         const hovered = hoveredTool === label;
-        const background = active && !disabled ? "var(--selected)" : hovered && !disabled ? "#F4F6FA" : "transparent";
-        const color = disabled ? "#B8C0CC" : active ? "#fff" : "#374151";
+        const background = active && !disabled ? "var(--selected)" : hovered && !disabled ? "rgba(60, 60, 67, 0.08)" : "transparent";
+        const color = disabled ? "#AEAEB2" : active ? "#fff" : "var(--primary-text)";
 
         return (
           <button
             aria-label={label}
             aria-pressed={isActiveTool ? true : undefined}
             disabled={disabled}
-            className="group relative mb-2 grid h-11 w-11 place-items-center rounded-full text-primary transition"
+            className="apple-pressable group relative mb-2 grid h-11 w-11 place-items-center rounded-full text-primary"
             style={{
               position: "relative",
               display: "grid",
@@ -146,7 +148,7 @@ export function LeftToolbar() {
               borderRadius: 999,
               background,
               color,
-              boxShadow: active && !disabled ? "0 10px 24px rgba(108, 99, 255, 0.26)" : "none",
+              boxShadow: active && !disabled ? "0 5px 14px rgba(108, 99, 255, 0.22)" : "none",
               cursor: disabled ? "not-allowed" : "pointer",
               opacity: disabled ? 0.72 : 1,
               transform: pressedTool === label && !disabled ? "scale(0.94)" : "scale(1)",
@@ -199,9 +201,9 @@ export function LeftToolbar() {
           padding: 0,
           border: 0,
           borderRadius: 999,
-          background: generatedImagesPanelOpen || pressedTool === "AI 返图备份" ? "var(--selected)" : hoveredTool === "AI 返图备份" ? "#F4F6FA" : "transparent",
-          color: generatedImagesPanelOpen || pressedTool === "AI 返图备份" ? "#fff" : "#374151",
-          boxShadow: generatedImagesPanelOpen || pressedTool === "AI 返图备份" ? "0 10px 24px rgba(108, 99, 255, 0.26)" : "none",
+          background: generatedImagesPanelOpen || pressedTool === "AI 返图备份" ? "var(--selected)" : hoveredTool === "AI 返图备份" ? "rgba(60, 60, 67, 0.08)" : "transparent",
+          color: generatedImagesPanelOpen || pressedTool === "AI 返图备份" ? "#fff" : "var(--primary-text)",
+          boxShadow: generatedImagesPanelOpen || pressedTool === "AI 返图备份" ? "0 5px 14px rgba(108, 99, 255, 0.22)" : "none",
           transform: pressedTool === "AI 返图备份" ? "scale(0.94)" : "scale(1)",
           transition: "background 140ms ease, color 140ms ease, transform 120ms ease, box-shadow 140ms ease"
         }}
@@ -226,9 +228,9 @@ export function LeftToolbar() {
           padding: 0,
           border: 0,
           borderRadius: 999,
-          background: settingsPanelOpen || pressedTool === "设置" ? "var(--selected)" : hoveredTool === "设置" ? "#F4F6FA" : "transparent",
-          color: settingsPanelOpen || pressedTool === "设置" ? "#fff" : "#374151",
-          boxShadow: settingsPanelOpen || pressedTool === "设置" ? "0 10px 24px rgba(108, 99, 255, 0.26)" : "none",
+          background: settingsPanelOpen || pressedTool === "设置" ? "var(--selected)" : hoveredTool === "设置" ? "rgba(60, 60, 67, 0.08)" : "transparent",
+          color: settingsPanelOpen || pressedTool === "设置" ? "#fff" : "var(--primary-text)",
+          boxShadow: settingsPanelOpen || pressedTool === "设置" ? "0 5px 14px rgba(108, 99, 255, 0.22)" : "none",
           transform: pressedTool === "设置" ? "scale(0.94)" : "scale(1)",
           transition: "background 140ms ease, transform 120ms ease"
         }}

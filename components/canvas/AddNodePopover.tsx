@@ -167,7 +167,7 @@ export function AddNodePopover({ toCanvasPosition }: { toCanvasPosition: (point:
 
   return (
     <div
-      className="fixed z-40 w-[900px] rounded-[14px] border border-line bg-white p-3 shadow-[0_18px_46px_rgba(15,23,42,0.13)]"
+      className="fixed z-[2147483002] w-[900px] rounded-[14px] border border-line bg-white p-3 shadow-[0_18px_46px_rgba(15,23,42,0.13)]"
       data-add-node-popover="true"
       onClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => {

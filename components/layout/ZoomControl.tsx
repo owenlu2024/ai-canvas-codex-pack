@@ -103,8 +103,8 @@ export function ZoomControl() {
     height: 40,
     placeItems: "center",
     borderRadius: 999,
-    border: "1px solid var(--node-border)",
-    background: "#fff",
+    border: "1px solid transparent",
+    background: "rgba(255, 255, 255, 0.44)",
     color: "var(--primary-text)",
     transition: "background 140ms ease, transform 120ms ease, color 140ms ease"
   };
@@ -131,11 +131,14 @@ export function ZoomControl() {
             bottom: 60,
             width: 260,
             borderRadius: 18,
-            border: "1px solid var(--node-border)",
-            background: "#fff",
+            border: "1px solid rgba(255, 255, 255, 0.62)",
+            background: "rgba(250, 250, 252, 0.94)",
             padding: "10px 0",
-            boxShadow: "0 16px 36px rgba(15, 23, 42, 0.12)",
-            color: "#334155"
+            WebkitBackdropFilter: "blur(24px) saturate(160%)",
+            backdropFilter: "blur(24px) saturate(160%)",
+            boxShadow: "var(--floating-shadow)",
+            color: "var(--primary-text)",
+            transformOrigin: "bottom center"
           }}
         >
           {[
@@ -154,7 +157,7 @@ export function ZoomControl() {
                 border: 0,
                 background: "transparent",
                 padding: "10px 18px",
-                color: "#334155",
+                color: "var(--primary-text)",
                 fontSize: 16,
                 fontWeight: 500,
                 lineHeight: 1.25,
@@ -163,7 +166,7 @@ export function ZoomControl() {
               }}
               type="button"
               onMouseEnter={(event) => {
-                event.currentTarget.style.background = "#F7F8FB";
+                event.currentTarget.style.background = "var(--surface-control)";
               }}
               onMouseLeave={(event) => {
                 event.currentTarget.style.background = "transparent";
@@ -175,7 +178,7 @@ export function ZoomControl() {
         </div>
       ) : null}
         <div
-          className="flex items-center"
+          className="apple-glass flex items-center"
           onClick={(event) => {
             if (!collapsed && event.target === event.currentTarget) collapse();
           }}
@@ -187,10 +190,12 @@ export function ZoomControl() {
             gap: 8,
             overflow: "hidden",
             borderRadius: 26,
-            border: "1px solid var(--node-border)",
-            background: "rgba(255, 255, 255, 0.96)",
+            border: "1px solid rgba(255, 255, 255, 0.62)",
+            background: "var(--glass-background)",
+            WebkitBackdropFilter: "blur(22px) saturate(160%)",
+            backdropFilter: "blur(22px) saturate(160%)",
             padding: collapsed ? "0 5px" : "0 8px",
-            boxShadow: "0 12px 30px rgba(15, 23, 42, 0.10)",
+            boxShadow: "var(--floating-shadow)",
             transition: "width 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease"
           }}
         >

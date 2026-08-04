@@ -30,7 +30,7 @@ function IconButton({ children, disabled, label, onClick }: { children: React.Re
   return (
     <button
       aria-label={label}
-      className="grid h-[34px] w-[34px] place-items-center rounded-full border border-line bg-white text-primary shadow-sm transition hover:bg-[#F7F8FB] disabled:text-[#B8C0CC]"
+      className="apple-pressable grid h-[34px] w-[34px] place-items-center rounded-full border border-line bg-white/70 text-primary hover:bg-white disabled:text-[#AEAEB2]"
       disabled={disabled}
       style={{
         display: "grid",
@@ -39,9 +39,9 @@ function IconButton({ children, disabled, label, onClick }: { children: React.Re
         placeItems: "center",
         borderRadius: 999,
         border: "1px solid var(--node-border)",
-        background: "#fff",
-        color: disabled ? "#B8C0CC" : "var(--primary-text)",
-        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)"
+        background: "rgba(255, 255, 255, 0.68)",
+        color: disabled ? "#AEAEB2" : "var(--primary-text)",
+        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.035)"
       }}
       onClick={onClick}
       title={label}
@@ -55,7 +55,7 @@ function IconButton({ children, disabled, label, onClick }: { children: React.Re
 function MenuButton({ children, icon, onClick }: { children: React.ReactNode; icon: React.ReactNode; onClick: () => void }) {
   return (
     <button
-      className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm font-semibold text-primary transition hover:bg-[#F7F8FB]"
+      className="apple-pressable flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm font-semibold text-primary hover:bg-[var(--surface-control)]"
       onClick={onClick}
       style={{
         display: "flex",
@@ -294,7 +294,7 @@ export function TopBar() {
 
   return (
     <header
-      className="pointer-events-auto fixed left-0 right-0 top-0 z-[2147483001] flex h-[52px] items-center border-b border-line bg-white px-4"
+      className="apple-glass pointer-events-auto fixed left-0 right-0 top-0 z-[2147483001] flex h-[52px] items-center px-4"
       style={{
         position: "fixed",
         left: "var(--visual-viewport-left, 0px)",
@@ -305,8 +305,12 @@ export function TopBar() {
         width: "calc(var(--visual-viewport-width, 100vw) / var(--ui-scale, 1))",
         height: 52,
         alignItems: "center",
-        borderBottom: "1px solid var(--node-border)",
-        background: "#fff",
+        border: 0,
+        borderBottom: "1px solid rgba(60, 60, 67, 0.10)",
+        background: "var(--glass-background)",
+        WebkitBackdropFilter: "blur(20px) saturate(160%)",
+        backdropFilter: "blur(20px) saturate(160%)",
+        boxShadow: "0 1px 0 rgba(255,255,255,0.62)",
         padding: "0 16px",
         transform: "scale(var(--ui-scale, 1))",
         transformOrigin: "top left"
@@ -322,7 +326,7 @@ export function TopBar() {
           borderRadius: 9,
           background: "var(--selected)",
           color: "#fff",
-          boxShadow: "0 6px 14px rgba(108, 99, 255, 0.24)"
+          boxShadow: "0 5px 14px rgba(108, 99, 255, 0.20)"
         }}
       >
         <span
@@ -362,7 +366,7 @@ export function TopBar() {
           />
         ) : (
           <button
-            className="flex max-w-[42vw] items-center truncate text-lg font-semibold text-primary"
+            className="apple-pressable flex max-w-[42vw] items-center truncate rounded-[8px] text-lg font-semibold text-primary hover:bg-black/[0.035]"
             onDoubleClick={startTitleEdit}
             style={{
               display: "flex",
@@ -383,7 +387,7 @@ export function TopBar() {
         <button
           aria-expanded={menuOpen}
           aria-label="项目菜单"
-          className="grid h-8 w-8 place-items-center rounded-full text-primary transition hover:bg-[#F7F8FB]"
+          className="apple-pressable grid h-8 w-8 place-items-center rounded-full text-primary hover:bg-black/[0.045]"
           onClick={() => {
             setEditingTitle(false);
             setMenuOpen((current) => !current);
@@ -394,17 +398,20 @@ export function TopBar() {
         </button>
         {menuOpen ? (
           <div
-            className="absolute left-0 top-9 w-[248px] rounded-xl border border-line bg-white p-2 shadow-soft"
+            className="apple-glass absolute left-0 top-9 w-[248px] rounded-xl p-2"
             style={{
               position: "absolute",
               left: 0,
               top: 36,
               width: 248,
               borderRadius: 12,
-              border: "1px solid var(--node-border)",
-              background: "#fff",
+              border: "1px solid rgba(255, 255, 255, 0.62)",
+              background: "rgba(250, 250, 252, 0.94)",
               padding: 8,
-              boxShadow: "0 12px 32px rgba(15, 23, 42, 0.12)"
+              WebkitBackdropFilter: "blur(24px) saturate(160%)",
+              backdropFilter: "blur(24px) saturate(160%)",
+              boxShadow: "var(--floating-shadow)",
+              transformOrigin: "top left"
             }}
           >
             <MenuButton icon={<FilePlus2 size={16} strokeWidth={1.9} />} onClick={() => void createBlankProject()}>

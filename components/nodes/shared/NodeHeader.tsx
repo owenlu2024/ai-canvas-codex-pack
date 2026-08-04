@@ -17,12 +17,13 @@ export function NodeHeader({ actions, canRun, onRun, runState, title }: NodeHead
   const running = runState === "running";
 
   return (
-    <div className="flex h-[54px] items-center gap-3 px-[18px]">
-      <h2 className="min-w-0 flex-1 truncate text-[17px] font-bold leading-none text-primary" data-prompt-title-region="true">{title}</h2>
+    <div className="flex h-[52px] items-center gap-3 px-[18px]">
+      <h2 className="min-w-0 flex-1 truncate text-[17px] font-semibold leading-[22px] tracking-[-0.015em] text-primary" data-prompt-title-region="true">{title}</h2>
       <NodeStatusBadge runState={runState} />
       {canRun ? (
         <button
-          className="inline-flex h-9 items-center gap-2 rounded-full bg-selected px-4 text-sm font-bold text-white transition hover:bg-[#5B54E8]"
+          aria-label={running ? "停止运行" : "运行"}
+          className="apple-pressable inline-flex h-[34px] items-center gap-2 rounded-full bg-selected px-4 text-[14px] font-semibold leading-5 text-white shadow-[0_4px_12px_rgba(108,99,255,0.2)] hover:bg-[var(--selected-hover)] active:bg-[var(--selected-pressed)]"
           onClick={(event) => {
             event.stopPropagation();
             onRun();

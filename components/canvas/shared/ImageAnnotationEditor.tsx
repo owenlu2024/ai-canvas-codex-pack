@@ -397,8 +397,8 @@ export function ImageAnnotationEditor({ imageUrl, onClose, onSend }: { imageUrl:
       const dx = event.clientX - dragRef.current.pointerX;
       const dy = event.clientY - dragRef.current.pointerY;
       setPosition({
-        x: Math.min(window.innerWidth - panelSize.width - 16, Math.max(16, dragRef.current.x + dx)),
-        y: Math.min(window.innerHeight - 56, Math.max(16, dragRef.current.y + dy))
+        x: Math.min(window.innerWidth - panelSize.width - 8, Math.max(8, dragRef.current.x + dx)),
+        y: Math.min(window.innerHeight - 48, Math.max(8, dragRef.current.y + dy))
       });
     };
     const stop = () => {
@@ -439,17 +439,17 @@ export function ImageAnnotationEditor({ imageUrl, onClose, onSend }: { imageUrl:
       }
       if (current.handle.includes("w")) {
         nextWidth = Math.min(maxWidth, Math.max(minWidth, current.width - dx));
-        nextX = Math.min(right - minWidth, Math.max(16, right - nextWidth));
+        nextX = Math.min(right - minWidth, Math.max(8, right - nextWidth));
         nextWidth = right - nextX;
       }
       if (current.handle.includes("n")) {
         nextHeight = Math.min(maxHeight, Math.max(minHeight, current.height - dy));
-        nextY = Math.min(bottom - minHeight, Math.max(16, bottom - nextHeight));
+        nextY = Math.min(bottom - minHeight, Math.max(8, bottom - nextHeight));
         nextHeight = bottom - nextY;
       }
 
-      if (nextX + nextWidth > window.innerWidth - 16) nextWidth = window.innerWidth - 16 - nextX;
-      if (nextY + nextHeight > window.innerHeight - 16) nextHeight = window.innerHeight - 16 - nextY;
+      if (nextX + nextWidth > window.innerWidth - 8) nextWidth = window.innerWidth - 8 - nextX;
+      if (nextY + nextHeight > window.innerHeight - 8) nextHeight = window.innerHeight - 8 - nextY;
 
       setPosition({ x: nextX, y: nextY });
       setPanelSize({
@@ -770,7 +770,7 @@ export function ImageAnnotationEditor({ imageUrl, onClose, onSend }: { imageUrl:
   return (
     <section
       aria-label="图片标注编辑器"
-      className="absolute z-[80] flex flex-col overflow-hidden rounded-[14px] border border-[#D9DDE6] bg-white shadow-[0_20px_56px_rgba(15,23,42,0.18)]"
+      className="fixed z-[2147483002] flex flex-col overflow-hidden rounded-[14px] border border-[#D9DDE6] bg-white shadow-[0_20px_56px_rgba(15,23,42,0.18)]"
       data-image-preview="true"
       style={{ height: panelSize.height, left: position.x, top: position.y, width: panelSize.width }}
     >

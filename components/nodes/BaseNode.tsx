@@ -86,10 +86,16 @@ function useConfiguredImageModels(fallbackOptions: string[], currentModel?: stri
       const baseModel = getBaseModelId(model);
       return typeof baseModel === "string" && fallbackSet.has(baseModel);
     });
+    // The provider's saved model list can be stale or incomplete. Always expose every
+    // image model that this node and our generation API have an adapter for; unprefixed
+    // entries use the primary API, while configured prefixed entries remain available.
+    fallbackOptions.forEach((model) => {
+      if (!filtered.some((configuredModel) => getBaseModelId(configuredModel) === model)) filtered.push(model);
+    });
     if (!loaded && currentModel && fallbackSet.has(getBaseModelId(currentModel) ?? "") && !filtered.includes(currentModel)) {
       return [currentModel, ...filtered];
     }
-    return filtered.length ? filtered : fallbackOptions;
+    return filtered.length ? filtered.sort() : fallbackOptions;
   }, [currentModel, fallbackOptions, fallbackSet, loaded, models]);
 }
 
@@ -163,7 +169,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
   const displayTitle = imageNumber ? `Image ${imageNumber}` : data.title;
   const nodeWidth = isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageTextEditorNode ? 480 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 690 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isProductRetouchNode ? 620 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isProductRetouchNode ? 620 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
 
@@ -601,6 +607,8 @@ function MosquitoSceneDirectorPanel({ id, data }: { id: string; data: CanvasNode
   const mosquitoWavelength = params.mosquitoWavelength ?? "395 nm｜标准紫光";
   const attractionLightDisabled = mosquitoWavelength === "无｜灯光关闭";
   const mosquitoMethod = params.mosquitoMethod ?? "自动判断";
+  const glueBoardPosition = ({ 正面粘板: "正面粘胶", 背面粘板: "背面粘胶", 双面粘板: "双面粘胶" } as Record<string, string>)[params.glueBoardPosition ?? ""] ?? params.glueBoardPosition ?? "自动识别";
+  const glueBoardPositionDisabled = mosquitoMethod !== "粘板粘捕";
   const effectPresetOptions = getMosquitoEffectPresetOptions(mosquitoMethod);
   const effectPreset = effectPresetOptions.includes(params.effectPreset ?? "") ? params.effectPreset as string : "自动匹配";
   const nextParams = useMemo(() => ({
@@ -610,6 +618,7 @@ function MosquitoSceneDirectorPanel({ id, data }: { id: string; data: CanvasNode
     effectStyle: params.effectStyle ?? "舒适商业",
     insectAmount: params.insectAmount ?? "少量",
     insectScale: params.insectScale ?? "自动合理",
+    glueBoardPosition,
     mosquitoMethod,
     mosquitoSceneMode: "true",
     mosquitoWavelength,
@@ -619,7 +628,7 @@ function MosquitoSceneDirectorPanel({ id, data }: { id: string; data: CanvasNode
     sceneType: params.sceneType ?? "自动",
     schemes: normalizeBoundedCount(params.schemes, 1, 6, 4),
     timeMood: params.timeMood === "暗光室内" ? "暗光环境" : params.timeMood ?? "夜晚"
-  }), [attractionLightDisabled, backgroundPresence, effectPreset, mosquitoMethod, mosquitoWavelength, params.attractionLight, params.effectStyle, params.insectAmount, params.insectScale, params.outputLanguage, params.peopleInteraction, params.sceneType, params.schemes, params.timeMood, peopleInteractionDisabled]);
+  }), [attractionLightDisabled, backgroundPresence, effectPreset, glueBoardPosition, mosquitoMethod, mosquitoWavelength, params.attractionLight, params.effectStyle, params.insectAmount, params.insectScale, params.outputLanguage, params.peopleInteraction, params.sceneType, params.schemes, params.timeMood, peopleInteractionDisabled]);
 
   useEffect(() => {
     const sameModel = data.modelId === modelId;
@@ -644,6 +653,7 @@ function MosquitoSceneDirectorPanel({ id, data }: { id: string; data: CanvasNode
           if (locked) return;
           updateNodeData(id, { modelParams: { ...params, ...nextParams, mosquitoMethod: value, effectPreset: "自动匹配" } });
         }} options={["自动判断", "电击灭蚊", "风扇吸入", "粘板粘捕"]} value={nextParams.mosquitoMethod} />
+        <GenerateSelect disabled={locked || glueBoardPositionDisabled} label="粘胶位置" onChange={(value) => updateParam("glueBoardPosition", value)} options={glueBoardPositionDisabled ? ["自动识别"] : ["自动识别", "正面粘胶", "背面粘胶", "双面粘胶"]} value={glueBoardPositionDisabled ? "自动识别" : nextParams.glueBoardPosition} />
         <GenerateSelect disabled={locked} label="使用场景" onChange={(value) => updateParam("sceneType", value)} options={["自动", "卧室", "客厅", "庭院", "露营", "餐厅", "商业空间"]} value={nextParams.sceneType} />
         <GenerateSelect disabled={locked} label="背景主体" onChange={(value) => updateParam("backgroundPresence", value)} options={["自动", "无人物和宠物", "仅人物", "仅宠物", "人物和宠物"]} value={nextParams.backgroundPresence} />
         <GenerateSelect disabled={locked || peopleInteractionDisabled} label="人物互动" onChange={(value) => updateParam("peopleInteraction", value)} options={peopleInteractionDisabled ? ["无人物互动"] : ["自动", "仅作背景", "手持产品", "操作使用", "拆卸清理", "被蚊虫困扰", "被蚊虫惊扰特效"]} value={nextParams.peopleInteraction} />

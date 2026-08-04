@@ -29,6 +29,7 @@ import { ImageChatNode } from "@/components/nodes/ImageChatNode";
 import { ImageNode } from "@/components/nodes/ImageNode";
 import { MultiGenerateNode } from "@/components/nodes/MultiGenerateNode";
 import { PromptNode } from "@/components/nodes/PromptNode";
+import { FloatingLayerPortal } from "@/components/layout/FloatingLayerPortal";
 import { useDisplayScale } from "@/components/layout/useDisplayScale";
 import { isSameColorConnection } from "@/lib/connectionRules";
 import { getReadableZoomFloor } from "@/lib/displayScale";
@@ -75,7 +76,7 @@ const edgeTypes = {
 const initialViewport = { x: 0, y: 0, zoom: 1 };
 const promptEditorMinWidth = 360;
 const promptEditorMinHeight = 260;
-const promptEditorMargin = 24;
+const promptEditorMargin = 8;
 const annotatedImageNodeGap = 48;
 const annotatedImageNodeOffset = 28;
 const annotatedImageNodeWidth = 320;
@@ -1168,35 +1169,41 @@ export function AiCanvas() {
       <SelectionToolbar />
       <CanvasContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />
       {promptEditor && promptEditorNode ? (
-        <PromptFloatingEditor
-          nodeId={promptEditorNode.id}
-          onBeginEdit={saveHistory}
-          onChangePrompt={(next) => updateNodeData(promptEditorNode.id, { prompt: next })}
-          onChangeRichHtml={(next) => updateNodeData(promptEditorNode.id, { promptRichHtml: next })}
-          onClose={() => setPromptEditor(null)}
-          onPanelChange={setPromptEditor}
-          panel={promptEditor}
-          prompt={promptEditorNode.data.prompt ?? ""}
-          richHtml={typeof promptEditorNode.data.promptRichHtml === "string" ? promptEditorNode.data.promptRichHtml : buildVisibleTextPromptRichHtml(promptEditorNode.data.prompt ?? "")}
-          wrapperRef={wrapperRef}
-        />
+        <FloatingLayerPortal>
+          <PromptFloatingEditor
+            nodeId={promptEditorNode.id}
+            onBeginEdit={saveHistory}
+            onChangePrompt={(next) => updateNodeData(promptEditorNode.id, { prompt: next })}
+            onChangeRichHtml={(next) => updateNodeData(promptEditorNode.id, { promptRichHtml: next })}
+            onClose={() => setPromptEditor(null)}
+            onPanelChange={setPromptEditor}
+            panel={promptEditor}
+            prompt={promptEditorNode.data.prompt ?? ""}
+            richHtml={typeof promptEditorNode.data.promptRichHtml === "string" ? promptEditorNode.data.promptRichHtml : buildVisibleTextPromptRichHtml(promptEditorNode.data.prompt ?? "")}
+            wrapperRef={wrapperRef}
+          />
+        </FloatingLayerPortal>
       ) : null}
       {imagePreviewUrl ? (
-        <ImageAnnotationEditor
-          imageUrl={imagePreviewUrl}
-          onClose={() => setImagePreviewUrl(null)}
-          onSend={(annotatedImageUrl) => {
-            const sourceNode = nodes.find((node) => node.selected && node.data.kind === "image" && node.data.imageUrl === imagePreviewUrl)
-              ?? nodes.find((node) => node.data.kind === "image" && node.data.imageUrl === imagePreviewUrl);
-            const fallback = toCanvasPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-            addNode("image", sourceNode
-              ? findNearbyAnnotatedImagePosition(sourceNode, nodes)
-              : fallback, { imageUrl: annotatedImageUrl });
-            setImagePreviewUrl(null);
-          }}
-        />
+        <FloatingLayerPortal>
+          <ImageAnnotationEditor
+            imageUrl={imagePreviewUrl}
+            onClose={() => setImagePreviewUrl(null)}
+            onSend={(annotatedImageUrl) => {
+              const sourceNode = nodes.find((node) => node.selected && node.data.kind === "image" && node.data.imageUrl === imagePreviewUrl)
+                ?? nodes.find((node) => node.data.kind === "image" && node.data.imageUrl === imagePreviewUrl);
+              const fallback = toCanvasPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+              addNode("image", sourceNode
+                ? findNearbyAnnotatedImagePosition(sourceNode, nodes)
+                : fallback, { imageUrl: annotatedImageUrl });
+              setImagePreviewUrl(null);
+            }}
+          />
+        </FloatingLayerPortal>
       ) : null}
-      <AddNodePopover toCanvasPosition={toCanvasPosition} />
+      <FloatingLayerPortal>
+        <AddNodePopover toCanvasPosition={toCanvasPosition} />
+      </FloatingLayerPortal>
     </div>
   );
 }
@@ -1569,7 +1576,7 @@ function PromptFloatingEditor({
   return (
     <section
       aria-label="Prompt 编辑器"
-      className="nodrag nopan nowheel absolute z-[70] flex flex-col overflow-hidden rounded-[14px] border border-[#D9DDE6] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.14)]"
+      className="nodrag nopan nowheel fixed z-[2147483002] flex flex-col overflow-hidden rounded-[14px] border border-[#D9DDE6] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.14)]"
       onPointerMove={updatePanelInteraction}
       onPointerUp={stopPanelInteraction}
       style={{ height: panel.height, left: panel.x, top: panel.y, width: panel.width }}
