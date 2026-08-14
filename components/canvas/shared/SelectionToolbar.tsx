@@ -9,10 +9,16 @@ import { useCanvasStore } from "@/store/canvasStore";
 const openPromptEditorEvent = "ai-canvas-open-prompt-editor";
 
 function getNodeWidth(node: Node<CanvasNodeData>) {
+  if (node.data.kind === "image" || node.data.kind === "video") {
+    return Number(node.data.width ?? (node.data.kind === "video" ? 640 : 320));
+  }
   return Number(node.data.width ?? node.measured?.width ?? 320);
 }
 
 function getNodeHeight(node: Node<CanvasNodeData>) {
+  if (node.data.kind === "image" || node.data.kind === "video") {
+    return Number(node.data.height ?? (node.data.kind === "video" ? 520 : 260));
+  }
   return Number(node.data.height ?? node.measured?.height ?? 260);
 }
 
@@ -123,7 +129,7 @@ function edgeTouchesLockedNode(edge: Pick<Edge, "source" | "target">, nodes: Nod
 }
 
 function isRunningLockingNode(node: Node<CanvasNodeData>) {
-  return (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
+  return (node.data.kind === "generateImage" || node.data.kind === "storyboardImage" || node.data.kind === "minimaxH3Prompt" || node.data.kind === "minimaxH3Video" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "videoDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function DisconnectLeftIcon() {

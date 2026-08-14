@@ -4,10 +4,10 @@ function getDownloadUrl(imageUrl: string, filename: string) {
     : imageUrl;
 }
 
-export async function downloadImageToFile(imageUrl: string, filename: string) {
-  const response = await fetch(getDownloadUrl(imageUrl, filename));
+export async function downloadMediaToFile(mediaUrl: string, filename: string) {
+  const response = await fetch(getDownloadUrl(mediaUrl, filename));
   if (!response.ok) {
-    throw new Error(`图片下载失败 (${response.status})`);
+    throw new Error(`文件下载失败 (${response.status})`);
   }
 
   const blobUrl = URL.createObjectURL(await response.blob());
@@ -19,4 +19,8 @@ export async function downloadImageToFile(imageUrl: string, filename: string) {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
+export async function downloadImageToFile(imageUrl: string, filename: string) {
+  return downloadMediaToFile(imageUrl, filename);
 }

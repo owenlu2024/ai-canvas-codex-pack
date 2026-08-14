@@ -106,16 +106,24 @@ select:focus-visible,
 
 .react-flow__node {
   border-radius: 18px;
-  cursor: pointer;
+  cursor: default;
   will-change: transform;
 }
 
-.react-flow__node:active,
 .react-flow__node.dragging,
 .react-flow__node.dragging.selected,
 .react-flow__nodesselection,
 .react-flow__nodesselection-rect {
   cursor: grabbing !important;
+}
+
+.react-flow__node .ai-node-drag-handle {
+  cursor: grab;
+}
+
+.react-flow__node.dragging .ai-node-drag-handle,
+.react-flow__node .ai-node-drag-handle:active {
+  cursor: grabbing;
 }
 
 .react-flow__node textarea,
@@ -298,23 +306,30 @@ select:focus-visible,
 }
 
 .canvas-connecting-text .ai-canvas-port--text,
-.canvas-connecting-image .ai-canvas-port--image {
+.canvas-connecting-image .ai-canvas-port--image,
+.canvas-connecting-video .ai-canvas-port--video {
   opacity: 1 !important;
   box-shadow: 0 0 0 7px rgba(108, 99, 255, 0.1), 0 4px 12px rgba(15, 23, 42, 0.2);
 }
 
 .canvas-connecting-text .react-flow__handle-left.ai-canvas-port--text,
-.canvas-connecting-image .react-flow__handle-left.ai-canvas-port--image {
+.canvas-connecting-image .react-flow__handle-left.ai-canvas-port--image,
+.canvas-connecting-video .react-flow__handle-left.ai-canvas-port--video {
   transform: translate(-50%, -50%) scale(1.2);
 }
 
 .canvas-connecting-text .react-flow__handle-right.ai-canvas-port--text,
-.canvas-connecting-image .react-flow__handle-right.ai-canvas-port--image {
+.canvas-connecting-image .react-flow__handle-right.ai-canvas-port--image,
+.canvas-connecting-video .react-flow__handle-right.ai-canvas-port--video {
   transform: translate(50%, -50%) scale(1.2);
 }
 
 .canvas-connecting-text .ai-canvas-port--image,
-.canvas-connecting-image .ai-canvas-port--text {
+.canvas-connecting-text .ai-canvas-port--video,
+.canvas-connecting-image .ai-canvas-port--text,
+.canvas-connecting-image .ai-canvas-port--video,
+.canvas-connecting-video .ai-canvas-port--text,
+.canvas-connecting-video .ai-canvas-port--image {
   opacity: 0.32 !important;
   filter: grayscale(0.45);
 }

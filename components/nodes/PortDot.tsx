@@ -6,7 +6,10 @@ import { useCanvasStore } from "@/store/canvasStore";
 
 export function PortDot({ kind, nodeId, port, index }: { kind: NodeKind; nodeId: string; port: Port; index: number }) {
   const isLeft = port.direction === "input";
-  const top = index === 0 ? "50%" : "70%";
+  const videoDirectorInputPositions = ["28%", "50%", "72%"];
+  const top = (kind === "videoDirector" || kind === "minimaxH3Video") && isLeft
+    ? videoDirectorInputPositions[index] ?? "50%"
+    : index === 0 ? "50%" : "70%";
   const connected = useCanvasStore((state) =>
     state.edges.some((edge) => (
       (edge.target === nodeId && edge.targetHandle === port.id) ||
@@ -14,9 +17,9 @@ export function PortDot({ kind, nodeId, port, index }: { kind: NodeKind; nodeId:
     ))
   );
   const locked = useCanvasStore((state) =>
-    state.nodes.some((node) => node.id === nodeId && (node.data.kind === "generateImage" || node.data.kind === "imageTextEditor" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running")
+    state.nodes.some((node) => node.id === nodeId && (node.data.kind === "generateImage" || node.data.kind === "storyboardImage" || node.data.kind === "minimaxH3Prompt" || node.data.kind === "minimaxH3Video" || node.data.kind === "imageTextEditor" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "videoDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running")
   );
-  const alwaysShowInput = kind === "generateImage" || kind === "imageTextEditor" || kind === "hdRedraw" || kind === "hdRedraw2" || kind === "rhinoTest" || kind === "textImageLayout" || kind === "gridImage" || kind === "sceneImage" || kind === "mosquitoSceneImage" || kind === "productRetouch" || kind === "industrialDesignImage" || kind === "productRemix" || kind === "imageChat" || kind === "sceneDirector" || kind === "mosquitoSceneDirector" || kind === "taobaoPageDirector" || kind === "industrial_designer" || kind === "product_poster" || kind === "visual_director";
+  const alwaysShowInput = kind === "videoDirector" || kind === "minimaxH3Prompt" || kind === "minimaxH3Video" || kind === "generateImage" || kind === "storyboardImage" || kind === "imageTextEditor" || kind === "hdRedraw" || kind === "hdRedraw2" || kind === "rhinoTest" || kind === "textImageLayout" || kind === "gridImage" || kind === "sceneImage" || kind === "mosquitoSceneImage" || kind === "productRetouch" || kind === "industrialDesignImage" || kind === "productRemix" || kind === "imageChat" || kind === "sceneDirector" || kind === "mosquitoSceneDirector" || kind === "taobaoPageDirector" || kind === "industrial_designer" || kind === "product_poster" || kind === "visual_director";
   const visible = !isLeft || alwaysShowInput || connected;
 
   return (

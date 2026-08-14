@@ -36,6 +36,7 @@ import { getReadableZoomFloor } from "@/lib/displayScale";
 import { getHandlePortType, portsByNode, type CanvasNodeData, type PortType } from "@/lib/nodeTypes";
 import { getImageDisplayUrl } from "@/lib/imageDisplayUrl";
 import { buildVisibleTextPromptRichHtml } from "@/lib/promptHighlight";
+import { isSupportedVideoFile } from "@/lib/videoFiles";
 import { nextZIndex } from "@/lib/zIndex";
 import { type CanvasWorkspaceSnapshot, useCanvasStore } from "@/store/canvasStore";
 
@@ -45,9 +46,13 @@ const openPromptEditorEvent = "ai-canvas-open-prompt-editor";
 
 const nodeTypes = {
   image: ImageNode,
+  video: ImageNode,
   prompt: PromptNode,
   imageChat: ImageChatNode,
   sceneDirector: ImageChatNode,
+  videoDirector: ImageChatNode,
+  minimaxH3Prompt: ImageChatNode,
+  minimaxH3Video: MultiGenerateNode,
   mosquitoSceneDirector: ImageChatNode,
   taobaoPageDirector: ImageChatNode,
   industrial_designer: ImageChatNode,
@@ -55,6 +60,7 @@ const nodeTypes = {
   visual_director: MultiGenerateNode,
   multiGenerate: MultiGenerateNode,
   generateImage: MultiGenerateNode,
+  storyboardImage: MultiGenerateNode,
   imageTextEditor: MultiGenerateNode,
   hdRedraw: MultiGenerateNode,
   hdRedraw2: MultiGenerateNode,
@@ -285,7 +291,7 @@ function sanitizePromptRichHtml(value: string) {
 }
 
 function isRunningLockingNode(node?: Node<CanvasNodeData>) {
-  return (node?.data.kind === "generateImage" || node?.data.kind === "hdRedraw" || node?.data.kind === "hdRedraw2" || node?.data.kind === "rhinoTest" || node?.data.kind === "textImageLayout" || node?.data.kind === "gridImage" || node?.data.kind === "sceneImage" || node?.data.kind === "mosquitoSceneImage" || node?.data.kind === "productRetouch" || node?.data.kind === "industrialDesignImage" || node?.data.kind === "productRemix" || node?.data.kind === "imageChat" || node?.data.kind === "sceneDirector" || node?.data.kind === "mosquitoSceneDirector" || node?.data.kind === "taobaoPageDirector" || node?.data.kind === "industrial_designer" || node?.data.kind === "product_poster" || node?.data.kind === "visual_director") && node.data.runState === "running";
+  return (node?.data.kind === "generateImage" || node?.data.kind === "storyboardImage" || node?.data.kind === "minimaxH3Prompt" || node?.data.kind === "minimaxH3Video" || node?.data.kind === "hdRedraw" || node?.data.kind === "hdRedraw2" || node?.data.kind === "rhinoTest" || node?.data.kind === "textImageLayout" || node?.data.kind === "gridImage" || node?.data.kind === "sceneImage" || node?.data.kind === "mosquitoSceneImage" || node?.data.kind === "productRetouch" || node?.data.kind === "industrialDesignImage" || node?.data.kind === "productRemix" || node?.data.kind === "imageChat" || node?.data.kind === "sceneDirector" || node?.data.kind === "videoDirector" || node?.data.kind === "mosquitoSceneDirector" || node?.data.kind === "taobaoPageDirector" || node?.data.kind === "industrial_designer" || node?.data.kind === "product_poster" || node?.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function connectionTouchesRunningLockingNode(connection: Pick<Connection, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
@@ -311,6 +317,12 @@ function getNextCopyImageNumber(nodes: Node<CanvasNodeData>[], reserved = new Se
   return undefined;
 }
 
+function getNextCopyVideoNumber(nodes: Node<CanvasNodeData>[], reserved = new Set<number>()) {
+  const used = new Set(nodes.filter((node) => node.data.kind === "video").map((node) => Number(node.data.videoNumber)).filter((number) => Number.isInteger(number) && number >= 1 && number <= 100));
+  for (let number = 1; number <= 100; number += 1) if (!used.has(number) && !reserved.has(number)) return number;
+  return undefined;
+}
+
 function replaceImageMentionNumbers(text: string, imageNumberMap: Map<number, number>) {
   if (!imageNumberMap.size) return text;
   return text.replace(/(@(?:image\s*)?|<\s*image\s*)(\d{1,3})(\s*>)?/gi, (match, prefix: string, rawNumber: string, suffix = "") => {
@@ -324,6 +336,7 @@ function makeDragCopiedNodes(sourceNodes: Node<CanvasNodeData>[], allNodes: Node
   let zIndex = startZIndex;
   const idMap: Record<string, string> = {};
   const reservedImageNumbers = new Set<number>();
+  const reservedVideoNumbers = new Set<number>();
   const imageNumberMap = new Map<number, number>();
   const selectedSourceIds = new Set(sourceNodes.map((node) => node.id));
   const copiedNodes: Node<CanvasNodeData>[] = [];
@@ -350,6 +363,11 @@ function makeDragCopiedNodes(sourceNodes: Node<CanvasNodeData>[], allNodes: Node
       } else {
         delete data.imageNumber;
       }
+    }
+    if (node.data.kind === "video") {
+      const videoNumber = getNextCopyVideoNumber([...allNodes, ...copiedNodes], reservedVideoNumbers);
+      if (videoNumber) { reservedVideoNumbers.add(videoNumber); data.videoNumber = videoNumber; }
+      else delete data.videoNumber;
     }
     copiedNodes.push({
       ...node,
@@ -725,6 +743,38 @@ export function AiCanvas() {
     [addNode, findEmptyImageNodeAtPoint, getSingleSelectedEmptyImageNode, toCanvasPosition, updateNodeData]
   );
 
+  const addVideoFiles = useCallback(
+    (files: File[], screenPoint: { x: number; y: number }) => {
+      const videoFiles = files.filter(isSupportedVideoFile);
+      if (!videoFiles.length) return;
+
+      const canvasPoint = toCanvasPosition(screenPoint);
+      const fillTargetId = [...nodes]
+        .sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0))
+        .find((node) => {
+          if (node.data.kind !== "video" || node.data.videoUrl) return false;
+          const width = getNodeWidth(node);
+          const height = getNodeHeight(node);
+          return canvasPoint.x >= node.position.x && canvasPoint.x <= node.position.x + width && canvasPoint.y >= node.position.y && canvasPoint.y <= node.position.y + height;
+        })?.id;
+
+      videoFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const videoData = { runState: "idle" as const, videoName: file.name, videoType: file.type, videoUrl: String(reader.result) };
+          if (index === 0 && fillTargetId) {
+            updateNodeData(fillTargetId, videoData, { record: true });
+            return;
+          }
+          const offsetIndex = fillTargetId ? index - 1 : index;
+          addNode("video", { x: canvasPoint.x + offsetIndex * 34, y: canvasPoint.y + offsetIndex * 34 }, videoData);
+        };
+        reader.readAsDataURL(file);
+      });
+    },
+    [addNode, nodes, toCanvasPosition, updateNodeData]
+  );
+
   useEffect(() => {
     let active = true;
     const hydrateSavedWorkspace = async () => {
@@ -1019,7 +1069,9 @@ export function AiCanvas() {
         }}
         onDrop={(event) => {
           event.preventDefault();
-          addImageFiles(Array.from(event.dataTransfer.files), { x: event.clientX, y: event.clientY }, { mode: "drop" });
+          const files = Array.from(event.dataTransfer.files);
+          addImageFiles(files, { x: event.clientX, y: event.clientY }, { mode: "drop" });
+          addVideoFiles(files, { x: event.clientX, y: event.clientY });
         }}
         onEdgesChange={(changes) => {
           const unlockedChanges = changes.filter((change) => {

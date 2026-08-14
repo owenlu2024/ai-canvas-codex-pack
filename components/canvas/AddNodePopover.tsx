@@ -21,12 +21,14 @@ type AddNodeCategory = {
   title: string;
   skillOptions: AddNodeOption[];
   imageOptions: AddNodeOption[];
+  nodeColumnTitle?: string;
 };
 
 const inputColumn: AddNodeColumn = {
-  title: "输入节点",
+  title: "通用节点",
   options: [
     { kind: "image", label: "Image", description: "图片输入" },
+    { kind: "video", label: "Video", description: "视频上传与播放" },
     { kind: "prompt", label: "Prompt", description: "文本提示词" }
   ]
 };
@@ -98,6 +100,19 @@ const categories: AddNodeCategory[] = [
     imageOptions: [
       { kind: "productRetouch", label: "精修图", description: "灭蚊灯产品背景与灯光精修" },
       { kind: "mosquitoSceneImage", label: "灭蚊场景图", description: "严格执行灭蚊场景 Prompt" }
+    ]
+  },
+  {
+    id: "video-production",
+    title: "视频制作",
+    nodeColumnTitle: "视频生成节点",
+    skillOptions: [
+      { kind: "videoDirector", label: "视频大导演", description: "产品广告片分镜策划" },
+      { kind: "minimaxH3Prompt", label: "MiniMax H3 提示词", description: "按 H3 规则扩展视频 Prompt" },
+      { kind: "storyboardImage", label: "分镜图", description: "产品一致性分镜生图" }
+    ],
+    imageOptions: [
+      { kind: "minimaxH3Video", label: "MiniMax H3 视频", description: "文生、首尾帧与多模态视频" }
     ]
   }
 ];
@@ -242,7 +257,7 @@ export function AddNodePopover({ toCanvasPosition }: { toCanvasPosition: (point:
         </section>
         <section className="min-h-[204px] rounded-[12px] border border-line bg-[#FBFCFE] p-3">
           <div className="mb-3 rounded-[12px] border border-[#E7ECF4] bg-[#F4F7FB] p-1">
-            <div className="grid grid-cols-6 gap-1">
+            <div className="grid grid-cols-7 gap-1">
               {categories.map((category) => {
                 const active = category.id === activeCategory.id;
                 return (
@@ -263,16 +278,10 @@ export function AddNodePopover({ toCanvasPosition }: { toCanvasPosition: (point:
               })}
             </div>
           </div>
-          {activeCategory.skillOptions.length || activeCategory.imageOptions.length ? (
-            <div className="grid grid-cols-2 gap-3">
-              <NodeOptionGroup onAdd={addOptionOnPrimaryClick} options={activeCategory.skillOptions} title="Skills" />
-              <NodeOptionGroup onAdd={addOptionOnPrimaryClick} options={activeCategory.imageOptions} title="生图节点" />
-            </div>
-          ) : (
-            <div className="flex min-h-[132px] items-center justify-center rounded-[12px] border border-dashed border-line bg-white text-[13px] font-semibold text-secondary">
-              平面设计节点预留中
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-3">
+            <NodeOptionGroup onAdd={addOptionOnPrimaryClick} options={activeCategory.skillOptions} title="Skills" />
+            <NodeOptionGroup onAdd={addOptionOnPrimaryClick} options={activeCategory.imageOptions} title={activeCategory.nodeColumnTitle ?? "生图节点"} />
+          </div>
         </section>
       </div>
     </div>

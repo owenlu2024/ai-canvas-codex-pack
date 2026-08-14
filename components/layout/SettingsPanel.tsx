@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Save, Settings, TestTube2, Trash2, X } from "lucide-react";
+import { ChevronDown, Plus, Save, Settings, TestTube2, Trash2, X } from "lucide-react";
 import { clientAiSettingsStorageKey as storageKey, formatApiConfigId, legacyClientAiSettingsStorageKey as legacyStorageKey, normalizeClientStoredSettings } from "@/lib/clientAiSettings";
 import { useCanvasStore } from "@/store/canvasStore";
 
@@ -126,6 +126,80 @@ function Field({ children, label }: { children: React.ReactNode; label: string }
 
 function inputClassName() {
   return "h-9 rounded-[10px] border border-line bg-[#FBFCFE] px-3 text-sm font-semibold text-primary outline-none transition focus:border-selected";
+}
+
+type ModelCategory = "image" | "text" | "video";
+
+function getModelListLabel(model: string) {
+  const match = model.match(/^(\d{3})-(.+)$/);
+  return match ? { apiId: match[1], name: match[2] } : { apiId: undefined, name: model };
+}
+
+function ModelStats({ imageModels, textModels, videoModels }: Pick<StoredApiSettings, "imageModels" | "textModels" | "videoModels">) {
+  const [expandedCategory, setExpandedCategory] = useState<ModelCategory | null>(null);
+  const categories: Array<{ id: ModelCategory; label: string; models: string[] }> = [
+    { id: "text", label: "LLM 大模型", models: textModels },
+    { id: "image", label: "图像生成模型", models: imageModels },
+    { id: "video", label: "视频生成模型", models: videoModels }
+  ];
+  const expanded = categories.find((category) => category.id === expandedCategory);
+
+  return (
+    <div className="overflow-hidden rounded-[12px] border border-line bg-[#FBFCFE]">
+      <div className="grid grid-cols-3 divide-x divide-line">
+        {categories.map((category) => {
+          const isExpanded = expandedCategory === category.id;
+          return (
+            <button
+              aria-expanded={isExpanded}
+              className="group min-w-0 px-2.5 py-2.5 text-left outline-none transition-colors hover:bg-white focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selected active:bg-[#F1F4F8]"
+              key={category.id}
+              onClick={() => setExpandedCategory(isExpanded ? null : category.id)}
+              type="button"
+            >
+              <span className="flex items-center justify-between gap-1 text-[11px] font-bold text-secondary">
+                <span className="truncate">{category.label}</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`shrink-0 transition-transform duration-200 motion-reduce:transition-none ${isExpanded ? "rotate-180" : ""}`}
+                  size={14}
+                  strokeWidth={2}
+                />
+              </span>
+              <span className="mt-1 block text-lg font-bold text-primary">{category.models.length}</span>
+            </button>
+          );
+        })}
+      </div>
+      {expanded ? (
+        <div className="border-t border-line bg-white px-2.5 py-2.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-primary">{expanded.label}列表</p>
+            <p className="text-[11px] font-semibold text-secondary">共 {expanded.models.length} 个</p>
+          </div>
+          {expanded.models.length ? (
+            <ul className="grid max-h-44 gap-1 overflow-y-auto pr-1" role="list">
+              {expanded.models.map((model) => {
+                const item = getModelListLabel(model);
+                return (
+                  <li className="flex min-w-0 items-center gap-2 rounded-[8px] bg-[#F7F8FB] px-2.5 py-2" key={model}>
+                    {item.apiId ? (
+                      <span className="shrink-0 rounded-md border border-line bg-white px-1.5 py-0.5 font-mono text-[10px] font-bold text-secondary">
+                        {item.apiId}
+                      </span>
+                    ) : null}
+                    <span className="min-w-0 break-all text-xs font-semibold text-primary" title={item.name}>{item.name}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="rounded-[8px] bg-[#F7F8FB] px-3 py-4 text-center text-xs font-semibold text-secondary">暂无模型</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function SettingsPanel() {
@@ -387,8 +461,9 @@ export function SettingsPanel() {
           <X size={17} strokeWidth={2} />
         </button>
       </div>
-      <div className="grid gap-3 overflow-y-auto px-4 py-4">
-        {apiConfigs.map((config, index) => {
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto px-4 py-4">
+          {apiConfigs.map((config, index) => {
           const apiId = config.id ?? formatApiConfigId(index);
           return (
             <div className={`rounded-[12px] border p-3 ${index === 0 ? "border-line bg-white" : "border-[#F2DFB8] bg-[#FFFCF1]"}`} key={apiId}>
@@ -452,20 +527,10 @@ export function SettingsPanel() {
               </div>
             </div>
           );
-        })}
-        <div className="grid grid-cols-3 gap-2 rounded-[12px] border border-line bg-[#FBFCFE] p-2.5">
-          <div>
-            <p className="text-[11px] font-bold text-secondary">图像模型</p>
-            <p className="mt-1 text-lg font-bold text-primary">{imageModels.length}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-secondary">文本模型</p>
-            <p className="mt-1 text-lg font-bold text-primary">{textModels.length}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-secondary">视频模型</p>
-            <p className="mt-1 text-lg font-bold text-primary">{videoModels.length}</p>
-          </div>
+          })}
+        </div>
+        <div className="shrink-0 border-t border-line bg-white/95 px-4 py-3">
+          <ModelStats imageModels={imageModels} textModels={textModels} videoModels={videoModels} />
         </div>
       </div>
     </aside>

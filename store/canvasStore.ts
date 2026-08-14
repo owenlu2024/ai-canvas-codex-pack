@@ -39,6 +39,7 @@ const defaultGridImageModel = "gpt-image-2";
 
 function makeNode(id: string, kind: NodeKind, position: XYPosition, zIndex: number, extra?: Partial<CanvasNodeData>): Node<CanvasNodeData> {
   return {
+    dragHandle: ".ai-node-drag-handle",
     id,
     type: kind === "group" ? "groupFrame" : kind,
     position,
@@ -55,7 +56,7 @@ function makeNode(id: string, kind: NodeKind, position: XYPosition, zIndex: numb
 }
 
 function isRunningLockingNode(node: Node<CanvasNodeData>) {
-  return (node.data.kind === "generateImage" || node.data.kind === "imageTextEditor" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
+  return (node.data.kind === "generateImage" || node.data.kind === "storyboardImage" || node.data.kind === "minimaxH3Prompt" || node.data.kind === "minimaxH3Video" || node.data.kind === "imageTextEditor" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "videoDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running";
 }
 
 function edgeTouchesRunningLockingNode(edge: Pick<Edge, "source" | "target">, nodes: Node<CanvasNodeData>[]) {
@@ -485,6 +486,12 @@ function getNextImageNumber(nodes: Node<CanvasNodeData>[], reserved = new Set<nu
   return undefined;
 }
 
+function getNextVideoNumber(nodes: Node<CanvasNodeData>[], reserved = new Set<number>()) {
+  const used = new Set(nodes.filter((node) => node.data.kind === "video").map((node) => Number(node.data.videoNumber)).filter((number) => Number.isInteger(number) && number >= 1 && number <= 100));
+  for (let number = 1; number <= 100; number += 1) if (!used.has(number) && !reserved.has(number)) return number;
+  return undefined;
+}
+
 function replaceImageMentionNumbers(text: string, imageNumberMap: Map<number, number>) {
   if (!imageNumberMap.size) return text;
   return text.replace(/(@(?:image\s*)?|<\s*image\s*)(\d{1,3})(\s*>)?/gi, (match, prefix: string, rawNumber: string, suffix = "") => {
@@ -502,6 +509,7 @@ function makeCopiedNodes(
 ) {
   let zIndex = startZIndex;
   const reservedImageNumbers = new Set<number>();
+  const reservedVideoNumbers = new Set<number>();
   const idMap = new Map<string, string>();
   const imageNumberMap = new Map<number, number>();
   const copiedNodes: Node<CanvasNodeData>[] = [];
@@ -531,6 +539,11 @@ function makeCopiedNodes(
       } else {
         delete nextData.imageNumber;
       }
+    }
+    if (node.data.kind === "video") {
+      const videoNumber = getNextVideoNumber([...baseNodes, ...copiedNodes], reservedVideoNumbers);
+      if (videoNumber) { reservedVideoNumbers.add(videoNumber); nextData.videoNumber = videoNumber; }
+      else delete nextData.videoNumber;
     }
 
     copiedNodes.push({
@@ -572,8 +585,8 @@ function makeCopiedNodes(
 function getNodeSize(node: Node<CanvasNodeData>) {
   const isIndustrialAiPrompt = node.data.kind === "imageChat" && node.data.modelParams?.module === "Industrial Design";
   return {
-    height: Number(node.data.height ?? (node.data.kind === "product_poster" ? 720 : node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "mosquitoSceneDirector" ? 760 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "productRetouch" ? 620 : node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" ? 430 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "mosquitoSceneImage" ? 440 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
-    width: Number(node.data.width ?? (node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
+    height: Number(node.data.height ?? (node.data.kind === "video" ? 520 : node.data.kind === "videoDirector" ? 820 : node.data.kind === "minimaxH3Prompt" ? 430 : node.data.kind === "minimaxH3Video" ? 450 : node.data.kind === "product_poster" ? 720 : node.data.kind === "taobaoPageDirector" ? 560 : node.data.kind === "sceneDirector" ? 760 : node.data.kind === "mosquitoSceneDirector" ? 760 : node.data.kind === "industrial_designer" ? 620 : node.data.kind === "visual_director" ? 400 : node.data.kind === "productRemix" ? 500 : node.data.kind === "productRetouch" ? 620 : node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" ? 430 : node.data.kind === "rhinoTest" ? 420 : node.data.kind === "mosquitoSceneImage" ? 440 : node.data.kind === "sceneImage" || node.data.kind === "industrialDesignImage" ? 390 : node.data.kind === "generateImage" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "imageChat" ? isIndustrialAiPrompt ? 420 : 360 : 260)),
+    width: Number(node.data.width ?? (node.data.kind === "video" ? 640 : node.data.kind === "videoDirector" ? 620 : node.data.kind === "minimaxH3Prompt" ? 420 : node.data.kind === "minimaxH3Video" ? 420 : node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" ? 620 : node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" ? 420 : 320))
   };
 }
 
@@ -714,10 +727,24 @@ function withImageNumbers(nodes: Node<CanvasNodeData>[]) {
   });
 }
 
+function withMediaNumbers(nodes: Node<CanvasNodeData>[]) {
+  const numbered = withImageNumbers(nodes);
+  const reserved = new Set<number>();
+  return numbered.map((node) => {
+    if (node.data.kind !== "video") return node;
+    const current = Number(node.data.videoNumber);
+    if (Number.isInteger(current) && current >= 1 && current <= 100 && !reserved.has(current)) { reserved.add(current); return node; }
+    const videoNumber = getNextVideoNumber(numbered, reserved);
+    if (!videoNumber) return node;
+    reserved.add(videoNumber);
+    return { ...node, data: { ...node.data, videoNumber } };
+  });
+}
+
 function parseImageMentionNumbers(text: string) {
   const numbers: number[] = [];
   const seen = new Set<number>();
-  const mentionPattern = /(?:@(?:image\s*)?|<\s*image\s*)(\d{1,3})(?:\s*>)?/gi;
+  const mentionPattern = /(?:@(?:image\s*)?|<\s*image\s*|\bimage\s*)(\d{1,3})(?:\s*>)?/gi;
   for (const match of text.matchAll(mentionPattern)) {
     const number = Number(match[1]);
     if (!Number.isInteger(number) || number < 1 || number > maxImageNumber || seen.has(number)) continue;
@@ -2451,9 +2478,9 @@ function layoutGrid(selectedNodes: Node<CanvasNodeData>[]) {
 }
 
 function normalizeHydratedNodes(nodes: Node<CanvasNodeData>[]) {
-  return withImageNumbers(nodes).map((node) => {
+  return withMediaNumbers(nodes).map((node) => {
     const { motionState, ...hydratedData } = node.data;
-    const cleanNode = { ...node, data: hydratedData };
+    const cleanNode = { ...node, dragHandle: ".ai-node-drag-handle", data: hydratedData };
     const nodeWithCurrentTitle = node.data.kind === "imageChat" && node.data.title !== nodeLabels.imageChat
       ? { ...cleanNode, data: { ...cleanNode.data, title: nodeLabels.imageChat } }
       : node.data.kind === "industrialDesignImage" && node.data.title === "Industrial Design Image"
@@ -2570,6 +2597,9 @@ interface CanvasState {
   addNode: (kind: NodeKind, position: XYPosition, data?: Partial<CanvasNodeData>) => void;
   runAiPromptNode: (id: string, generationId: string) => Promise<void>;
   runSceneDirectorNode: (id: string, generationId: string) => Promise<void>;
+  runVideoDirectorNode: (id: string, generationId: string) => Promise<void>;
+  runMinimaxH3PromptNode: (id: string, generationId: string) => Promise<void>;
+  runMinimaxH3VideoNode: (id: string, generationId: string) => Promise<void>;
   runTaobaoPageDirectorNode: (id: string, generationId: string) => Promise<void>;
   runIndustrialDesignerNode: (id: string, generationId: string) => Promise<void>;
   runProductPosterNode: (id: string, generationId: string) => Promise<void>;
@@ -2731,11 +2761,19 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const id = `${kind}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
     set((state) => {
       const imageNumber = kind === "image" ? data?.imageNumber ?? getNextImageNumber(state.nodes) : data?.imageNumber;
+      const videoNumber = kind === "video" ? data?.videoNumber ?? getNextVideoNumber(state.nodes) : data?.videoNumber;
       if (kind === "image" && !imageNumber) {
         return { addMenuOpen: false };
       }
+      if (kind === "video" && !videoNumber) return { addMenuOpen: false };
       const defaultData = kind === "imageChat"
         ? { modelId: defaultAiPromptModel, modelParams: { module: "Normal", output: "Chinese", schemes: "1" }, ...data }
+        : kind === "videoDirector"
+          ? { modelId: defaultSceneDirectorModel, modelParams: { duration: "30", aspectRatio: "16:9 横屏", adType: "产品宣传片", shotCount: "自动", pacing: "标准", productLock: "严格", outputLanguage: "中文", creativeDirection: "自动策划", voiceover: "简短旁白", screenCopy: "不需要", detailLevel: "专业" }, ...data }
+        : kind === "minimaxH3Prompt"
+          ? { modelId: defaultAiPromptModel, modelParams: { duration: "5", mode: "自动判断", shotStructure: "自动", soundStrategy: "自动规划" }, ...data }
+        : kind === "minimaxH3Video"
+          ? { modelParams: { duration: "5", generationType: "text", ratio: "16:9", resolution: "2K" }, ...data }
         : kind === "sceneDirector"
           ? {
               modelId: defaultSceneDirectorModel,
@@ -2869,6 +2907,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               },
               ...data
             }
+        : kind === "storyboardImage"
+          ? { height: 360, width: 420, ...data }
         : kind === "gridImage"
           ? { modelId: defaultGridImageModel, modelParams: { aspectRatio: "Auto", resolution: "1K", quality: "Auto" }, ...data }
         : kind === "hdRedraw" || kind === "hdRedraw2"
@@ -2896,6 +2936,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           makeNode(id, kind, position, zIndex, {
             ...defaultData,
             imageNumber,
+            videoNumber,
             motionState: "entering"
           })
         ]
@@ -2912,7 +2953,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       .map((edge) => snapshot.nodes.find((node) => node.id === edge.source))
       .filter((node): node is Node<CanvasNodeData> => Boolean(node));
     let promptNodes = inputNodes.filter((node) => typeof node.data.prompt === "string" && node.data.prompt.trim());
-    const isGenerateImageNode = source.data.kind === "generateImage";
+    const isStoryboardImageNode = source.data.kind === "storyboardImage";
+    const isGenerateImageNode = source.data.kind === "generateImage" || isStoryboardImageNode;
     const isImageTextEditorNode = source.data.kind === "imageTextEditor";
     const isHdRedrawNode = source.data.kind === "hdRedraw";
     const isHdRedraw2Node = source.data.kind === "hdRedraw2";
@@ -3480,6 +3522,20 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       : isProductRetouchNode
         ? orderReferenceImagesForPrompt(preparedReferenceImages.included, rolePrompt)
       : preparedReferenceImages.included;
+    if (isStoryboardImageNode) {
+      const storyboardReferenceLabels = referenceImages
+        .map((node, index) => `Image ${String(typeof node.data.imageNumber === "number" ? node.data.imageNumber : index + 1).padStart(3, "0")}`)
+        .join("、");
+      const consistencyRule = storyboardReferenceLabels
+        ? `本分镜实际代入的产品参考图：${storyboardReferenceLabels}。这些图片共同定义同一个产品；只使用本分镜 Prompt 明确引用的图片，不得自动加入其他未引用图片。`
+        : "本分镜没有指定产品参考图；如果画面不出现产品，可只生成环境或转场画面。";
+      prompt = [
+        "分镜图生成 — 产品一致性最高优先级。",
+        consistencyRule,
+        "当画面出现产品时，必须把参考产品当作不可重新设计的同一实物：严格保持整体轮廓、结构、部件数量与位置、长宽高比例、透视关系、材质、颜色、Logo、按键、开孔、灯带、纹理和所有可识别细节。允许按照分镜改变机位、景别、环境、灯光和产品在画面中的位置，但不得改变产品设计，不得添加、删除、替换或臆造产品部件。参考图未展示的角度只能依据已有结构保守推断，不得自由发挥。默认生成纯画面，除产品原有 Logo 外不得出现标题、字幕、广告语、水印或其他文字，除非分镜 Prompt 明确要求。",
+        prompt
+      ].filter(Boolean).join("\n\n");
+    }
     const textLayoutStyleReferenceImages = isTextImageLayoutNode ? getTextImageLayoutStyleReferenceImages(referenceImages, rolePrompt) : [];
     const textLayoutVerifiedStyleLabels = textLayoutStyleReferenceImages.map((node, index) => {
       const imageNumber = typeof node.data.imageNumber === "number" ? node.data.imageNumber : index + 1;
@@ -3620,16 +3676,66 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         model: modelId,
         sourceNodeId: id
       });
-      const requestBody = {
-        aiSettings: getClientAiSettingsPayload(),
-        images: requestImageUrls,
-        mode: "submit",
-        model: modelId,
-        params: requestParams,
-        prompt: requestPrompt,
-        sourceNodeId: id
-      };
-      images = await requestGeneratedImages(requestBody, controller);
+      if (isStoryboardImageNode && gridOutputEnabled && promptNodes.length > 1) {
+        const sortedPrompts = sortNodesVisually(promptNodes).slice(0, 10);
+        const panelImages: Array<{ url: string }> = [];
+        for (let panelIndex = 0; panelIndex < sortedPrompts.length; panelIndex += 1) {
+          const panelPrompt = String(sortedPrompts[panelIndex].data.prompt ?? "").trim();
+          const mentionedNumbers = parseImageMentionNumbers(panelPrompt);
+          const panelReferenceImages = mentionedNumbers
+            .map((imageNumber) => referenceImages.find((node) => node.data.imageNumber === imageNumber))
+            .filter((node): node is Node<CanvasNodeData> => Boolean(node?.data.imageUrl));
+          const uniquePanelReferenceImages = uniqueNodesById(panelReferenceImages);
+          const panelReferenceUrls = await prepareGenerationReferenceImageUrls(
+            uniquePanelReferenceImages.map((node) => node.data.imageUrl as string)
+          );
+          const primaryLabel = uniquePanelReferenceImages[0]?.data.imageNumber
+            ? `<Image${String(uniquePanelReferenceImages[0].data.imageNumber).padStart(3, "0")}>`
+            : "";
+          const panelManifest = buildGenerateImageReferenceManifest(uniquePanelReferenceImages);
+          const strictPanelPrompt = [
+            panelManifest,
+            `STORYBOARD PANEL ${panelIndex + 1} - STRICT PRODUCT IDENTITY LOCK:`,
+            primaryLabel
+              ? `${primaryLabel} is the immutable product identity anchor for this panel. Other attached product images, if any, are supporting views of that exact same physical product, never alternative designs.`
+              : "This panel has no explicitly referenced product image. Do not invent or add a product unless the panel prompt requests one.",
+            "When the product appears, reproduce it as the same manufactured object shown in the attached product reference: preserve its exact silhouette, body proportions, component count and placement, openings, grille, vents, rim, buttons, light strips, material boundaries, colors, logo, markings, textures, and distinctive details.",
+            "Do not redesign, stylize, beautify, simplify, merge reference views, create a hybrid, change the housing, move parts, add parts, remove parts, replace the grille, change the top or front structure, or invent unseen features.",
+            "The scene, camera distance, product position, lighting, reflections, and background may change. Product industrial design may not change. If the requested scene conflicts with the product reference, adapt the scene around the product.",
+            "Generate one clean full-frame storyboard image only. No grid, collage, captions, titles, subtitles, advertising copy, watermarks, or extra text unless the panel prompt explicitly requests visible text.",
+            `PANEL PROMPT:\n${panelPrompt}`
+          ].filter(Boolean).join("\n\n");
+          const panelResult = await requestGeneratedImages({
+            aiSettings: getClientAiSettingsPayload(),
+            images: panelReferenceUrls,
+            mode: "submit",
+            model: modelId,
+            params: {
+              ...requestParams,
+              equalGridPanels: "false",
+              gridEnabled: "false",
+              gridPanelCount: "1",
+              imageCount: "1"
+            },
+            prompt: strictPanelPrompt,
+            sourceNodeId: id
+          }, controller);
+          if (!panelResult[0]?.url) throw new Error(`分镜 ${panelIndex + 1} 没有返回图片。`);
+          panelImages.push(panelResult[0]);
+        }
+        images = panelImages;
+      } else {
+        const requestBody = {
+          aiSettings: getClientAiSettingsPayload(),
+          images: requestImageUrls,
+          mode: "submit",
+          model: modelId,
+          params: requestParams,
+          prompt: requestPrompt,
+          sourceNodeId: id
+        };
+        images = await requestGeneratedImages(requestBody, controller);
+      }
       generationControllers.delete(id);
       const current = get().nodes.find((node) => node.id === id);
       if (current?.data.generationId !== generationId || current.data.runState !== "running") return;
@@ -3672,7 +3778,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ? orderRhinoReferenceImages(uniqueNodesById([...outputConnectedReferenceImages, ...outputPromptReferenceImages]), outputRhinoPrimaryReferenceImage)
         : uniqueNodesById([...outputConnectedReferenceImages, ...outputPromptReferenceImages]))
         .slice(0, outputReferenceImageLimit);
-      const isGenerateImageOutput = source.data.kind === "generateImage";
+      const isStoryboardImageOutput = source.data.kind === "storyboardImage";
+      const isGenerateImageOutput = source.data.kind === "generateImage" || isStoryboardImageOutput;
       const isRhinoTestOutput = source.data.kind === "rhinoTest";
       const isTextImageLayoutOutput = source.data.kind === "textImageLayout";
       const isSceneImageOutput = source.data.kind === "sceneImage";
@@ -3683,7 +3790,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const generateGridOutput = isGenerateImageOutput && source.data.modelParams?.gridEnabled === "true";
       const sceneGridOutput = (isSceneImageOutput || isMosquitoSceneImageOutput) && source.data.modelParams?.gridEnabled === "true";
       const industrialDesignGridOutput = isIndustrialDesignImageOutput && source.data.modelParams?.gridEnabled === "true";
-      const generationMode = source.data.kind === "gridImage"
+      const generationMode = isStoryboardImageOutput && generateGridOutput
+        ? `分镜多图 ${Math.min(10, promptNodes.length)} 张`
+        : source.data.kind === "gridImage"
         ? `Grid Image ${Math.min(10, promptNodes.length)}`
         : generateGridOutput
           ? `Grid Image ${Math.min(10, promptNodes.length)}`
@@ -3737,7 +3846,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const generatedAt = Date.now();
       const generatedNodes = imagesWithNumbers.map(({ image, imageNumber }, index) => {
         currentZIndex = nextZIndex(currentZIndex);
-        const outputPrompt = source.data.kind === "textImageLayout"
+        const outputPrompt = source.data.kind === "storyboardImage" && source.data.modelParams?.gridEnabled === "true"
+          ? String(sortNodesVisually(promptNodes)[index]?.data.prompt ?? "")
+          : source.data.kind === "textImageLayout"
           ? buildTextImageLayoutPrompt(promptNodes, textLayoutVerifiedStyleLabels)
           : source.data.kind === "sceneImage"
           ? buildSceneImagePrompt(promptNodes, source.data.modelParams?.gridEnabled === "true")
@@ -3778,6 +3889,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
                 ? "Rhino 产品渲染"
               : source.data.kind === "textImageLayout"
                 ? "Text Image Layout"
+              : isStoryboardImageOutput
+                ? source.data.modelParams?.gridEnabled === "true" ? `分镜头 ${String(index + 1).padStart(2, "0")}` : "分镜图"
               : source.data.kind === "gridImage" || (source.data.kind === "generateImage" && source.data.modelParams?.gridEnabled === "true") ? `Grid Image ${String(Math.min(10, promptNodes.length)).padStart(2, "0")}` : "Image",
             prompt: outputPrompt,
             runState: "completed"
@@ -4111,6 +4224,239 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         ]
       };
     });
+  },
+  runMinimaxH3PromptNode: async (id, generationId) => {
+    const snapshot = get();
+    const source = snapshot.nodes.find((node) => node.id === id);
+    if (!source) return;
+    const prompt = sortNodesVisually(
+      snapshot.edges
+        .filter((edge) => edge.target === id && edge.targetHandle === "text-in")
+        .map((edge) => snapshot.nodes.find((node) => node.id === edge.source))
+        .filter((node): node is Node<CanvasNodeData> => Boolean(node?.data.kind === "prompt" && node.data.prompt?.trim()))
+    ).map((node) => node.data.prompt?.trim()).filter(Boolean).join("\n\n");
+    if (!prompt) {
+      set((state) => ({ nodes: state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: "请先连接 Prompt 文本节点。", generationId: undefined, runState: "failed" as const } } : node) }));
+      return;
+    }
+    const model = source.data.modelId?.trim() || defaultAiPromptModel;
+    const controller = new AbortController();
+    generationControllers.get(id)?.abort();
+    generationControllers.set(id, controller);
+    try {
+      const response = await fetch("/api/ai/minimax-h3-prompt", {
+        body: JSON.stringify({ aiSettings: getClientAiSettingsPayload(), instruction: prompt, model, params: source.data.modelParams ?? {} }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        signal: controller.signal
+      });
+      const payload = await response.json() as { error?: string; prompt?: string };
+      if (!response.ok) throw new Error(payload.error || `MiniMax H3 提示词生成失败：${response.status}`);
+      const enhancedPrompt = payload.prompt?.trim() ?? "";
+      if (!enhancedPrompt) throw new Error("LLM 没有返回可用的 MiniMax H3 Prompt。");
+      generationControllers.delete(id);
+      set((state) => {
+        const cleaned = removeConnectedGeneratedOutputs(state, id);
+        const currentSource = cleaned.nodes.find((node) => node.id === id);
+        if (!currentSource || currentSource.data.generationId !== generationId || currentSource.data.runState !== "running") return state;
+        const nextIndex = nextZIndex(state.globalZIndex);
+        const generatedAt = Date.now();
+        const outputNode = makeNode(`minimax-h3-prompt-output-${generatedAt}`, "prompt", findSingleOutputPosition(currentSource, cleaned.nodes), nextIndex, {
+          generatedBy: id,
+          prompt: enhancedPrompt,
+          runState: "completed",
+          title: "MiniMax H3 Prompt"
+        });
+        return {
+          activeEdgeId: null,
+          edges: [...cleaned.edges, { id: `edge-minimax-h3-prompt-${generatedAt}`, source: id, target: outputNode.id, sourceHandle: "text-out", targetHandle: "text-in", type: "deletable", selected: false, data: { generatedBy: id, portType: "text" } }],
+          globalZIndex: nextIndex,
+          historyFuture: [],
+          historyPast: pushHistory(state),
+          nodes: [...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, prompt: enhancedPrompt, runState: "completed" as const } } : node), outputNode]
+        };
+      });
+    } catch (error) {
+      generationControllers.delete(id);
+      set((state) => ({ nodes: state.nodes.map((node) => node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: error instanceof Error && error.name === "AbortError" ? "MiniMax H3 提示词已停止。" : error instanceof Error ? error.message : "MiniMax H3 提示词生成失败。", generationId: undefined, runState: error instanceof Error && error.name === "AbortError" ? "idle" as const : "failed" as const } } : node) }));
+    }
+  },
+  runMinimaxH3VideoNode: async (id, generationId) => {
+    const snapshot = get();
+    const source = snapshot.nodes.find((node) => node.id === id);
+    if (!source) return;
+    const inputEdges = snapshot.edges.filter((edge) => edge.target === id);
+    const inputs = inputEdges
+      .map((edge) => snapshot.nodes.find((node) => node.id === edge.source))
+      .filter((node): node is Node<CanvasNodeData> => Boolean(node));
+    const prompt = sortNodesVisually(inputs)
+      .filter((node) => node.data.kind === "prompt" && typeof node.data.prompt === "string")
+      .map((node) => node.data.prompt?.trim())
+      .filter(Boolean)
+      .join("\n\n");
+    const images = sortNodesVisually(inputs)
+      .filter((node) => node.data.kind === "image" && node.data.imageUrl)
+      .map((node) => ({ imageNumber: node.data.imageNumber, url: node.data.imageUrl as string }));
+    const videos = sortNodesVisually(inputs)
+      .filter((node) => node.data.kind === "video" && node.data.videoUrl)
+      .map((node) => ({ name: node.data.videoName, videoNumber: node.data.videoNumber, url: node.data.videoUrl as string }));
+    const params = source.data.modelParams ?? {};
+    const selectedModel = source.data.modelId?.trim() ?? "";
+    const generationType = params.generationType ?? "text";
+    const duration = Number.parseInt(params.duration ?? "5", 10);
+    const allowedH3Ratios = new Set(["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+    const validationError = !selectedModel || !/h3/i.test(getBaseModelId(selectedModel) ?? selectedModel)
+      ? "当前 API 设置中没有可用的 MiniMax-H3 视频模型。"
+      : !prompt
+      ? "请先连接 Prompt 文本节点。"
+      : !Number.isInteger(duration) || duration < 5 || duration > 15
+        ? "MiniMax-H3 视频时长只能是 5–15 秒。"
+        : !allowedH3Ratios.has(params.ratio ?? "16:9")
+          ? "MiniMax-H3 画面比例不符合官方范围。"
+      : generationType === "firstLast" && images.length !== 2
+        ? "首尾帧生视频必须且只能连接 2 张图片，按画布位置依次作为首帧和尾帧。"
+        : generationType === "multimodal" && !images.length
+          ? "12API 多模态生视频需要至少连接 1 张参考图片。"
+          : generationType === "text" && images.length
+            ? "文生视频模式不能连接参考图片，请断开图片或改为多模态生视频。"
+          : images.length > 5
+            ? "12API MiniMax H3 最多支持 5 张参考图片。"
+            : videos.length
+              ? "12API MiniMax H3 当前不支持参考视频，请改用参考图片。"
+              : "";
+    if (validationError) {
+      set((state) => ({ nodes: state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: validationError, generationId: undefined, runState: "failed" as const } } : node) }));
+      return;
+    }
+    const controller = new AbortController();
+    generationControllers.get(id)?.abort();
+    generationControllers.set(id, controller);
+    try {
+      const requestId = `h3-${Date.now()}-${Math.round(Math.random() * 100000)}`;
+      const submitSignal = typeof AbortSignal.any === "function" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.any([controller.signal, AbortSignal.timeout(195000)])
+        : controller.signal;
+      const submitResponse = await fetch("/api/ai/minimax-h3-video", {
+        body: JSON.stringify({ aiSettings: getClientAiSettingsPayload(), images, mode: "submit", model: selectedModel, params, prompt, requestId, videos }),
+        headers: { "Content-Type": "application/json", "X-Request-ID": requestId },
+        method: "POST",
+        signal: submitSignal
+      });
+      const submitPayload = await submitResponse.json() as { error?: string; taskId?: string; videoUrl?: string };
+      if (!submitResponse.ok) throw new Error(submitPayload.error || `MiniMax H3 提交失败：${submitResponse.status}`);
+      let videoUrl = submitPayload.videoUrl ?? "";
+      const taskId = submitPayload.taskId;
+      if (!videoUrl && !taskId) throw new Error("MiniMax H3 没有返回任务 ID。");
+      const startedAt = Date.now();
+      while (!videoUrl && Date.now() - startedAt < hostedImageGenerationMaxWaitMs) {
+        await delay(hostedImageGenerationPollMs, controller.signal);
+        const pollResponse = await fetch("/api/ai/minimax-h3-video", {
+          body: JSON.stringify({ aiSettings: getClientAiSettingsPayload(), mode: "poll", model: selectedModel, requestId, taskId }),
+          headers: { "Content-Type": "application/json", "X-Request-ID": requestId },
+          method: "POST",
+          signal: controller.signal
+        });
+        const pollPayload = await pollResponse.json() as { error?: string; status?: string; videoUrl?: string };
+        if (!pollResponse.ok && pollResponse.status !== 202) throw new Error(pollPayload.error || `MiniMax H3 查询失败：${pollResponse.status}`);
+        if (pollPayload.status === "failed" || pollPayload.status === "cancelled") throw new Error(pollPayload.error || "MiniMax H3 视频生成失败。");
+        videoUrl = pollPayload.videoUrl ?? "";
+      }
+      if (!videoUrl) throw new Error("MiniMax H3 视频生成超时，请稍后重试。");
+      generationControllers.delete(id);
+      set((state) => {
+        const current = state.nodes.find((node) => node.id === id);
+        if (!current || current.data.generationId !== generationId || current.data.runState !== "running") return state;
+        const videoNumber = getNextVideoNumber(state.nodes);
+        if (!videoNumber) return { nodes: state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: "Video 节点已达到 100 个上限。", generationId: undefined, runState: "failed" as const } } : node) };
+        const generatedAt = Date.now();
+        const nextIndex = nextZIndex(state.globalZIndex);
+        const outputNode = makeNode(`video-minimax-h3-${generatedAt}`, "video", findSingleOutputPosition(current, state.nodes, { height: 520, width: 640 }), nextIndex, {
+          generatedBy: id,
+          modelId: "MiniMax-H3",
+          prompt,
+          runState: "completed",
+          title: "MiniMax H3 视频",
+          videoName: `minimax-h3-${generatedAt}.mp4`,
+          videoNumber,
+          videoType: "video/mp4",
+          videoUrl
+        });
+        return {
+          activeEdgeId: null,
+          edges: [...state.edges, { id: `edge-video-minimax-h3-${generatedAt}`, source: id, target: outputNode.id, sourceHandle: "video-out", targetHandle: "video-in", type: "deletable", selected: false, data: { generatedBy: id, portType: "video" } }],
+          globalZIndex: nextIndex,
+          historyFuture: [],
+          historyPast: pushHistory(state),
+          nodes: [...state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, runState: "completed" as const } } : node), outputNode]
+        };
+      });
+    } catch (error) {
+      generationControllers.delete(id);
+      set((state) => ({ nodes: state.nodes.map((node) => node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: error instanceof Error && error.name === "AbortError" ? "MiniMax H3 已停止。" : error instanceof Error ? error.message : "MiniMax H3 视频生成失败。", generationId: undefined, runState: error instanceof Error && error.name === "AbortError" ? "idle" as const : "failed" as const } } : node) }));
+    }
+  },
+  runVideoDirectorNode: async (id, generationId) => {
+    const snapshot = get();
+    const source = snapshot.nodes.find((node) => node.id === id);
+    if (!source) return;
+    const inputIds = getConnectedNodeIds(snapshot.edges, id, "incoming");
+    const inputs = snapshot.nodes.filter((node) => inputIds.has(node.id));
+    const instruction = inputs.filter((node) => node.data.kind === "prompt" && typeof node.data.prompt === "string").map((node) => node.data.prompt).join("\n\n").trim();
+    const images = inputs.filter((node) => node.data.kind === "image" && node.data.imageUrl).map((node) => ({ imageNumber: node.data.imageNumber, url: node.data.imageUrl as string }));
+    const videos = inputs.filter((node) => node.data.kind === "video" && node.data.videoUrl).map((node) => ({ videoNumber: node.data.videoNumber, name: node.data.videoName || `Video ${String(node.data.videoNumber ?? 0).padStart(3, "0")}` }));
+    if (!images.length && !videos.length && !instruction) {
+      set((state) => ({ nodes: state.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: "请连接产品图片、场景图片、Video 或前置 Prompt。", generationId: undefined, runState: "failed" as const } } : node) }));
+      return;
+    }
+    const controller = new AbortController();
+    generationControllers.get(id)?.abort();
+    generationControllers.set(id, controller);
+    try {
+      const response = await fetch("/api/ai/video-director", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ aiSettings: getClientAiSettingsPayload(), images, videos, instruction, model: source.data.modelId || defaultSceneDirectorModel, params: source.data.modelParams ?? {} }) });
+      const payload = await response.json() as { error?: string; prompt?: string; schemes?: Array<{ title?: string; prompt?: string }> };
+      if (!response.ok) throw new Error(payload.error || `视频大导演失败：${response.status}`);
+      const availableImageReferences = images
+        .filter((image) => typeof image.imageNumber === "number" && image.imageNumber > 0)
+        .map((image) => ({
+          label: `Image ${String(image.imageNumber).padStart(3, "0")}`,
+          number: image.imageNumber as number
+        }));
+      const screenCopySetting = source.data.modelParams?.screenCopy ?? "不需要";
+      const userExplicitlyRequestsText = /(?:画面|屏幕|标题|字幕|文案|口号|文字|logo).{0,12}(?:显示|出现|加入|添加|写入|保留|需要)|(?:显示|加入|添加|写入).{0,12}(?:标题|字幕|文案|文字|口号)/i.test(instruction);
+      const allowScreenText = !["不需要", "自动生成"].includes(screenCopySetting) || userExplicitlyRequestsText;
+      const schemes = (payload.schemes ?? []).map((item, index) => {
+        const rawPrompt = item.prompt?.trim() || "";
+        const mentionedNumbers = new Set(parseImageMentionNumbers(rawPrompt));
+        const requiredImageReferences = availableImageReferences
+          .filter((image) => mentionedNumbers.has(image.number))
+          .map((image) => image.label)
+          .join("、");
+        const referenceRule = requiredImageReferences
+          ? `本分镜需要代入的图片（必须传给生图节点）：${requiredImageReferences}。只代入本分镜明确需要的图片，严格按照前置 Prompt 定义其作用；若画面出现产品，必须保持产品外观、结构、比例、材质、颜色、Logo 和关键细节一致。`
+          : "";
+        const screenTextRule = allowScreenText
+          ? `画面文字规则：只允许出现用户明确指定的${screenCopySetting === "不需要" || screenCopySetting === "自动生成" ? "文字内容" : screenCopySetting}，不得自行增加其他标题、字幕、广告语、卖点文案、标签、水印、网址、二维码或占位文字。`
+          : "画面文字规则：纯画面，除产品参考图上原有且必须保留的 Logo 外，画面内禁止出现任何标题、字幕、广告语、卖点文案、标签、额外品牌文字、水印、网址、二维码、占位文字或其他可读文字。";
+        return {
+          title: item.title?.trim() || `分镜 ${index + 1}`,
+          prompt: [rawPrompt, referenceRule, screenTextRule].filter(Boolean).join("\n\n")
+        };
+      }).filter((item) => item.prompt);
+      if (!schemes.length) throw new Error("视频大导演没有返回可用分镜。");
+      set((state) => {
+        const cleaned = removeConnectedGeneratedOutputs(state, id);
+        const currentSource = cleaned.nodes.find((node) => node.id === id);
+        if (!currentSource || currentSource.data.generationId !== generationId) return state;
+        let zIndex = state.globalZIndex;
+        const generatedAt = Date.now();
+        const positions = findGeneratedOutputPositions(currentSource, cleaned.nodes, schemes.length);
+        const promptNodes = schemes.map((scheme, index) => { zIndex = nextZIndex(zIndex); return makeNode(`prompt-video-director-${generatedAt}-${index}`, "prompt", positions[index], zIndex, { generatedBy: id, prompt: scheme.prompt, promptRichHtml: buildVisibleTextPromptRichHtml(scheme.prompt), runState: "completed", title: `分镜 ${index + 1}` }); });
+        const promptEdges = promptNodes.map((node, index) => ({ id: `edge-video-director-${generatedAt}-${index}`, source: id, target: node.id, sourceHandle: "text-out", targetHandle: "text-in", type: "deletable", data: { generatedBy: id, portType: "text" } } as Edge));
+        return { globalZIndex: zIndex, historyPast: pushHistory(state), historyFuture: [], nodes: [...cleaned.nodes.map((node) => node.id === id ? { ...node, data: { ...node.data, errorMessage: undefined, generationId: undefined, prompt: payload.prompt || schemes.map((s) => s.prompt).join("\n\n"), runState: "completed" as const } } : node), ...promptNodes], edges: [...cleaned.edges, ...promptEdges] };
+      });
+    } catch (error) {
+      set((state) => ({ nodes: state.nodes.map((node) => node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: error instanceof Error ? error.message : "视频大导演失败。", generationId: undefined, runState: "failed" as const } } : node) }));
+    } finally { generationControllers.delete(id); }
   },
   runSceneDirectorNode: async (id, generationId) => {
     const snapshot = syncMentionImageEdgesForRunningTarget(id, generationId, get, set);
@@ -4797,7 +5143,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((state) => {
       const selectedNodes = state.nodes.filter((node) => node.selected && node.data.kind !== "group");
       if (selectedNodes.length < 2) return state;
-      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
+      if (selectedNodes.some((node) => (node.data.kind === "generateImage" || node.data.kind === "storyboardImage" || node.data.kind === "minimaxH3Prompt" || node.data.kind === "minimaxH3Video" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "videoDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") && node.data.runState === "running")) return state;
 
       const useWorkflowLayout = selectedNodes.some((node) => node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director" || node.data.kind === "generateImage" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix");
       const positions = useWorkflowLayout
