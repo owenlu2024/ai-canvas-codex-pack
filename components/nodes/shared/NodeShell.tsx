@@ -7,13 +7,15 @@ interface NodeShellProps {
   children: ReactNode;
   height: number;
   motionState?: NodeMotionState;
+  nodeId?: string;
   portLayer?: ReactNode;
+  resizable?: boolean;
   running: boolean;
   selected: boolean;
   width: number;
 }
 
-export function NodeShell({ children, height, motionState, portLayer, running, selected, width }: NodeShellProps) {
+export function NodeShell({ children, height, motionState, nodeId, portLayer, resizable = false, running, selected, width }: NodeShellProps) {
   const runningBorderInset = 0.75;
   const runningBorderPath = [
     `M ${18} ${runningBorderInset}`,
@@ -32,6 +34,7 @@ export function NodeShell({ children, height, motionState, portLayer, running, s
       className={`ai-node-shell relative rounded-[18px] border bg-white ${
         running ? "ai-node-running shadow-[0_10px_30px_rgba(108,99,255,0.11)]" : ""
       } ${motionState ? `ai-node-${motionState}` : ""} ${selected ? "ai-node-selected border-selected" : "border-line hover:border-[#D9DEEA] hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"}`}
+      data-node-shell-id={nodeId}
       style={{ height, width }}
     >
       {running ? (
@@ -40,6 +43,14 @@ export function NodeShell({ children, height, motionState, portLayer, running, s
         </svg>
       ) : null}
       {portLayer}
+      {resizable ? (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-30">
+          <span className="nodrag nopan pointer-events-auto absolute -left-2 -top-2 h-6 w-6 cursor-nwse-resize" data-node-resize-corner="top-left" />
+          <span className="nodrag nopan pointer-events-auto absolute -right-2 -top-2 h-6 w-6 cursor-nesw-resize" data-node-resize-corner="top-right" />
+          <span className="nodrag nopan pointer-events-auto absolute -bottom-2 -left-2 h-6 w-6 cursor-nesw-resize" data-node-resize-corner="bottom-left" />
+          <span className="nodrag nopan pointer-events-auto absolute -bottom-2 -right-2 h-6 w-6 cursor-nwse-resize" data-node-resize-corner="bottom-right" />
+        </div>
+      ) : null}
       {selected ? (
         <span className="absolute -right-[11px] -top-[11px] z-10 grid h-6 w-6 place-items-center rounded-full bg-selected text-[13px] font-bold text-white shadow-[0_3px_10px_rgba(108,99,255,0.28)]">
           ✓

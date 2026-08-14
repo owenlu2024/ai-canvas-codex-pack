@@ -34,12 +34,14 @@ import {
   sceneImageModelSpecs
 } from "@/lib/generateImageModels";
 import { useCanvasStore } from "@/store/canvasStore";
-import { downloadImageToFile } from "@/lib/downloadImage";
+import { downloadImageToFile, downloadMediaToFile } from "@/lib/downloadImage";
 import { isVideoModel } from "@/lib/modelClassification";
+import { acceptedVideoFileTypes, getVideoFilenameExtension, isSupportedVideoFile } from "@/lib/videoFiles";
 
 interface StoredApiSettings {
   imageModels: string[];
   textModels: string[];
+  videoModels?: string[];
 }
 
 const promptPlannerModelOptions = ["gemini-2.5-flash", "gemini-3.1-flash-lite-preview", "agnes-2.0-flash"];
@@ -50,18 +52,22 @@ const industrialDesignImageModelIds = industrialDesignImageModelSpecs.map((model
 const productRemixModelIds = productRemixModelSpecs.map((model) => model.id);
 const openPromptEditorEvent = "ai-canvas-open-prompt-editor";
 
-function useConfiguredModels(kind: "image" | "text", fallbackOptions: string[]) {
-  const [models, setModels] = useState<string[]>(fallbackOptions);
+function useConfiguredModels(kind: "image" | "text" | "video", fallbackOptions: string[]) {
+  const [models, setModels] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const loadModels = () => {
       try {
         const saved = readClientAiSettings();
-        const configuredModels = kind === "image" ? saved?.imageModels ?? [] : saved?.textModels ?? [];
-        setModels(configuredModels.length ? configuredModels : fallbackOptions);
+        const configuredModels = kind === "image"
+          ? saved?.imageModels ?? []
+          : kind === "video"
+            ? saved?.videoModels ?? []
+            : saved?.textModels ?? [];
+        setModels(configuredModels);
       } catch {
-        setModels(fallbackOptions);
+        setModels([]);
       } finally {
         setLoaded(true);
       }
@@ -78,6 +84,15 @@ function useConfiguredModels(kind: "image" | "text", fallbackOptions: string[]) 
   return { loaded, models };
 }
 
+function useConfiguredH3VideoModels(currentModel?: string) {
+  const fallbackOptions = useMemo(() => [], []);
+  const { loaded, models } = useConfiguredModels("video", fallbackOptions);
+  return useMemo(() => {
+    const filtered = models.filter((model) => /h3/i.test(getBaseModelId(model) ?? model));
+    return Array.from(new Set(filtered)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [models]);
+}
+
 function useConfiguredImageModels(fallbackOptions: string[], currentModel?: string) {
   const { loaded, models } = useConfiguredModels("image", fallbackOptions);
   const fallbackSet = useMemo(() => new Set(fallbackOptions), [fallbackOptions]);
@@ -86,17 +101,11 @@ function useConfiguredImageModels(fallbackOptions: string[], currentModel?: stri
       const baseModel = getBaseModelId(model);
       return typeof baseModel === "string" && fallbackSet.has(baseModel);
     });
-    // The provider's saved model list can be stale or incomplete. Always expose every
-    // image model that this node and our generation API have an adapter for; unprefixed
-    // entries use the primary API, while configured prefixed entries remain available.
-    fallbackOptions.forEach((model) => {
-      if (!filtered.some((configuredModel) => getBaseModelId(configuredModel) === model)) filtered.push(model);
-    });
     if (!loaded && currentModel && fallbackSet.has(getBaseModelId(currentModel) ?? "") && !filtered.includes(currentModel)) {
       return [currentModel, ...filtered];
     }
-    return filtered.length ? filtered.sort() : fallbackOptions;
-  }, [currentModel, fallbackOptions, fallbackSet, loaded, models]);
+    return filtered.sort();
+  }, [currentModel, fallbackSet, loaded, models]);
 }
 
 function useConfiguredTextModels(fallbackOptions: string[], currentModel?: string) {
@@ -110,8 +119,8 @@ function useConfiguredTextModels(fallbackOptions: string[], currentModel?: strin
 
 function usePromptPlannerModel(data: CanvasNodeData) {
   const modelOptions = useConfiguredTextModels(promptPlannerModelOptions, data.modelId);
-  const modelDisplayName = (model: string) => getModelDisplayName(model, modelOptions);
-  const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId) ? data.modelId : modelOptions[0] ?? "gemini-2.5-flash";
+  const modelDisplayName = (model: string) => model ? getModelDisplayName(model, modelOptions) : "未读取到可用模型";
+  const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId) ? data.modelId : modelOptions[0] ?? "";
   return { modelDisplayName, modelId, modelOptions };
 }
 
@@ -125,6 +134,9 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const runAiPromptNode = useCanvasStore((state) => state.runAiPromptNode);
   const runSceneDirectorNode = useCanvasStore((state) => state.runSceneDirectorNode);
+  const runVideoDirectorNode = useCanvasStore((state) => state.runVideoDirectorNode);
+  const runMinimaxH3PromptNode = useCanvasStore((state) => state.runMinimaxH3PromptNode);
+  const runMinimaxH3VideoNode = useCanvasStore((state) => state.runMinimaxH3VideoNode);
   const runTaobaoPageDirectorNode = useCanvasStore((state) => state.runTaobaoPageDirectorNode);
   const runIndustrialDesignerNode = useCanvasStore((state) => state.runIndustrialDesignerNode);
   const runProductPosterNode = useCanvasStore((state) => state.runProductPosterNode);
@@ -140,10 +152,11 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
       (edge.id.startsWith("edge-mention-image-") || edge.data?.autoLinkedFromMention === true)
     )).length;
   });
-  const hasContent = Boolean(data.imageUrl || data.prompt);
+  const hasContent = Boolean(data.imageUrl || data.videoUrl || data.prompt);
   const canCopyPrompt = data.kind === "prompt" && Boolean(data.prompt?.trim());
   const isAiNode = data.kind === "imageChat" || data.kind === "multiGenerate";
   const isGenerateImageNode = data.kind === "generateImage";
+  const isStoryboardImageNode = data.kind === "storyboardImage";
   const isImageTextEditorNode = data.kind === "imageTextEditor";
   const isHdRedrawNode = data.kind === "hdRedraw";
   const isHdRedraw2Node = data.kind === "hdRedraw2";
@@ -155,23 +168,126 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const isProductRetouchNode = data.kind === "productRetouch";
   const isIndustrialDesignImageNode = data.kind === "industrialDesignImage";
   const isProductRemixNode = data.kind === "productRemix";
-  const isImageGeneratorNode = isGenerateImageNode || isImageTextEditorNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isMosquitoSceneImageNode || isProductRetouchNode || isIndustrialDesignImageNode || isProductRemixNode;
+  const isImageGeneratorNode = isGenerateImageNode || isStoryboardImageNode || isImageTextEditorNode || isHdRedrawNode || isHdRedraw2Node || isRhinoTestNode || isTextImageLayoutNode || isGridImageNode || isSceneImageNode || isMosquitoSceneImageNode || isProductRetouchNode || isIndustrialDesignImageNode || isProductRemixNode;
   const isAiPromptNode = data.kind === "imageChat";
   const isSceneDirectorNode = data.kind === "sceneDirector";
+  const isVideoDirectorNode = data.kind === "videoDirector";
+  const isMinimaxH3PromptNode = data.kind === "minimaxH3Prompt";
+  const isMinimaxH3VideoNode = data.kind === "minimaxH3Video";
+  const configuredH3VideoModels = useConfiguredH3VideoModels(data.modelId);
   const isMosquitoSceneDirectorNode = data.kind === "mosquitoSceneDirector";
   const isTaobaoPageDirectorNode = data.kind === "taobaoPageDirector";
   const isIndustrialDesignerNode = data.kind === "industrial_designer";
   const isProductPosterNode = data.kind === "product_poster";
   const isVisualDirectorNode = data.kind === "visual_director";
-  const isPromptPlannerNode = isAiPromptNode || isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode;
+  const isPromptPlannerNode = isAiPromptNode || isSceneDirectorNode || isVideoDirectorNode || isMinimaxH3PromptNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode;
+  const configuredPromptModels = useConfiguredTextModels(promptPlannerModelOptions, data.modelId);
   const isImageNode = data.kind === "image";
+  const isVideoNode = data.kind === "video";
+  const isPromptNode = data.kind === "prompt";
   const isRunning = data.runState === "running";
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
-  const displayTitle = imageNumber ? `Image ${imageNumber}` : data.title;
-  const nodeWidth = isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageTextEditorNode ? 480 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const nodeHeight = isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isProductRetouchNode ? 620 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const videoNumber = isVideoNode && typeof data.videoNumber === "number" ? String(data.videoNumber).padStart(3, "0") : null;
+  const displayTitle = imageNumber ? `Image ${imageNumber}` : videoNumber ? `Video ${videoNumber}` : data.title;
+  const defaultNodeWidth = isVideoNode ? 640 : isVideoDirectorNode ? 620 : isMinimaxH3PromptNode || isMinimaxH3VideoNode ? 420 : isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageTextEditorNode ? 480 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
+  const defaultNodeHeight = isVideoNode ? 520 : isVideoDirectorNode ? 820 : isMinimaxH3PromptNode ? (data.runState === "failed" && data.errorMessage ? 500 : 430) : isMinimaxH3VideoNode ? (data.runState === "failed" && data.errorMessage ? 520 : 450) : isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isProductRetouchNode ? 620 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const isResizableMediaNode = isImageNode || isVideoNode || isPromptNode;
+  const nodeWidth = isResizableMediaNode ? Number(data.width ?? defaultNodeWidth) : defaultNodeWidth;
+  const nodeHeight = isResizableMediaNode ? Number(data.height ?? defaultNodeHeight) : defaultNodeHeight;
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isResizableMediaNode) return;
+    const article = document.querySelector<HTMLElement>(`article[data-node-shell-id="${CSS.escape(id)}"]`);
+    const wrapper = article?.parentElement;
+    if (!article || !wrapper) return;
+    let activeResizeCleanup: (() => void) | null = null;
+    const getCorner = (event: PointerEvent) => {
+      const rect = article.getBoundingClientRect();
+      const threshold = 16;
+      const horizontal = Math.abs(event.clientX - rect.left) <= threshold ? "left" : Math.abs(event.clientX - rect.right) <= threshold ? "right" : null;
+      const vertical = Math.abs(event.clientY - rect.top) <= threshold ? "top" : Math.abs(event.clientY - rect.bottom) <= threshold ? "bottom" : null;
+      return horizontal && vertical ? { horizontal, vertical } as const : null;
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const corner = getCorner(event);
+      if (!corner) return;
+      event.preventDefault();
+      event.stopPropagation();
+      activeResizeCleanup?.();
+      const startNode = useCanvasStore.getState().nodes.find((node) => node.id === id);
+      if (!startNode) return;
+      const startWidth = Number(startNode.data.width ?? (isVideoNode ? 640 : 320));
+      const startHeight = Number(startNode.data.height ?? (isVideoNode ? 520 : 260));
+      const startPosition = startNode.position;
+      const screenWidth = article.getBoundingClientRect().width || startWidth;
+      const canvasScale = Math.max(0.01, screenWidth / startWidth);
+      const aspectRatio = startWidth / startHeight;
+      const startClientX = event.clientX;
+      const startClientY = event.clientY;
+      const minWidth = isVideoNode ? 394 : 240;
+      const maxWidth = 1280;
+      let animationFrame = 0;
+      let pendingSize: { height: number; position: { x: number; y: number }; width: number } | null = null;
+      const applyPendingSize = () => {
+        animationFrame = 0;
+        if (!pendingSize) return;
+        const next = pendingSize;
+        pendingSize = null;
+        useCanvasStore.setState((state) => ({
+          nodes: state.nodes.map((node) => node.id === id ? {
+            ...node,
+            height: next.height,
+            measured: { height: next.height, width: next.width },
+            position: next.position,
+            width: next.width,
+            data: { ...node.data, height: next.height, width: next.width }
+          } : node)
+        }));
+      };
+      const handleResizeMove = (moveEvent: PointerEvent) => {
+        const dx = (moveEvent.clientX - startClientX) / canvasScale;
+        const dy = (moveEvent.clientY - startClientY) / canvasScale;
+        const widthCandidate = startWidth + (corner.horizontal === "right" ? dx : -dx);
+        const heightCandidate = startHeight + (corner.vertical === "bottom" ? dy : -dy);
+        const widthChange = Math.abs(widthCandidate - startWidth) / startWidth;
+        const heightChange = Math.abs(heightCandidate - startHeight) / startHeight;
+        const rawWidth = widthChange >= heightChange ? widthCandidate : heightCandidate * aspectRatio;
+        const nextWidth = Math.round(Math.min(maxWidth, Math.max(minWidth, rawWidth)));
+        const nextHeight = Math.round(nextWidth / aspectRatio);
+        pendingSize = {
+          height: nextHeight,
+          position: {
+            x: corner.horizontal === "left" ? startPosition.x + startWidth - nextWidth : startPosition.x,
+            y: corner.vertical === "top" ? startPosition.y + startHeight - nextHeight : startPosition.y
+          },
+          width: nextWidth
+        };
+        if (!animationFrame) animationFrame = window.requestAnimationFrame(applyPendingSize);
+      };
+      const stopResize = () => {
+        if (animationFrame) window.cancelAnimationFrame(animationFrame);
+        applyPendingSize();
+        window.removeEventListener("pointermove", handleResizeMove);
+        window.removeEventListener("pointerup", stopResize);
+        window.removeEventListener("pointercancel", stopResize);
+        document.body.style.userSelect = "";
+        activeResizeCleanup = null;
+      };
+      activeResizeCleanup = stopResize;
+      document.body.style.userSelect = "none";
+      window.addEventListener("pointermove", handleResizeMove, { passive: true });
+      window.addEventListener("pointerup", stopResize);
+      window.addEventListener("pointercancel", stopResize);
+    };
+    wrapper.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      activeResizeCleanup?.();
+      wrapper.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [id, isResizableMediaNode, isVideoNode]);
 
   useEffect(() => {
     return () => {
@@ -198,7 +314,16 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   }
 
   const clear = () => {
-    updateNodeData(id, { generatedBy: undefined, imageUrl: undefined, modelId: undefined, prompt: "", runState: "idle" }, { record: true });
+    updateNodeData(id, {
+      generatedBy: undefined,
+      imageUrl: undefined,
+      modelId: undefined,
+      prompt: "",
+      runState: "idle",
+      videoName: undefined,
+      videoType: undefined,
+      videoUrl: undefined
+    }, { record: true });
   };
 
   const downloadImage = async () => {
@@ -209,6 +334,17 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
       await downloadImageToFile(data.imageUrl, filename);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "图片下载失败，请重试。");
+    }
+  };
+
+  const downloadVideo = async () => {
+    if (!data.videoUrl) return;
+    const extension = getVideoFilenameExtension(data.videoName, data.videoType);
+    const filename = data.videoName?.trim() || `video.${extension}`;
+    try {
+      await downloadMediaToFile(data.videoUrl, filename);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "视频下载失败，请重试。");
     }
   };
 
@@ -241,14 +377,35 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   };
 
   const run = () => {
-    if (isAiPromptNode || isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode) {
+    if (isMinimaxH3PromptNode) {
       if (data.runState === "running") {
         stopGenerateImageNode(id);
         return;
       }
       const generationId = `${id}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
       updateNodeData(id, { errorMessage: undefined, generationId, runState: "running" });
-      if (isSceneDirectorNode || isMosquitoSceneDirectorNode) void runSceneDirectorNode(id, generationId);
+      void runMinimaxH3PromptNode(id, generationId);
+      return;
+    }
+    if (isMinimaxH3VideoNode) {
+      if (data.runState === "running") {
+        stopGenerateImageNode(id);
+        return;
+      }
+      const generationId = `${id}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
+      updateNodeData(id, { errorMessage: undefined, generationId, runState: "running" });
+      void runMinimaxH3VideoNode(id, generationId);
+      return;
+    }
+    if (isAiPromptNode || isSceneDirectorNode || isVideoDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode) {
+      if (data.runState === "running") {
+        stopGenerateImageNode(id);
+        return;
+      }
+      const generationId = `${id}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
+      updateNodeData(id, { errorMessage: undefined, generationId, runState: "running" });
+      if (isVideoDirectorNode) void runVideoDirectorNode(id, generationId);
+      else if (isSceneDirectorNode || isMosquitoSceneDirectorNode) void runSceneDirectorNode(id, generationId);
       else if (isTaobaoPageDirectorNode) void runTaobaoPageDirectorNode(id, generationId);
       else if (isIndustrialDesignerNode) void runIndustrialDesignerNode(id, generationId);
       else if (isProductPosterNode) void runProductPosterNode(id, generationId);
@@ -280,7 +437,9 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
     <NodeShell
       height={nodeHeight}
       motionState={data.motionState}
+      nodeId={id}
       portLayer={<NodePortLayer hiddenAutoImageInputCount={hiddenAutoImageInputCount} kind={data.kind} nodeId={id} />}
+      resizable={isResizableMediaNode}
       running={isRunning}
       selected={selected}
       width={nodeWidth}
@@ -290,30 +449,31 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
           <NodeActions
             canEdit={data.kind === "prompt" ? true : isImageNode && Boolean(data.imageUrl)}
             canCopyPrompt={canCopyPrompt}
-            canDownloadImage={Boolean(data.imageUrl)}
+            canDownloadImage={Boolean(isVideoNode ? data.videoUrl : data.imageUrl)}
             copiedPrompt={copiedPrompt}
             hasContent={hasContent}
             onClear={clear}
             onCopyPrompt={() => void copyPrompt()}
-            onDownloadImage={downloadImage}
+            onDownloadImage={isVideoNode ? downloadVideo : downloadImage}
             onEdit={editNode}
             showEdit={data.kind === "prompt" || isImageNode}
             showCopyPrompt={data.kind === "prompt"}
-            showDownloadImage={isImageNode}
+            showDownloadImage={isImageNode || isVideoNode}
+            downloadLabel={isVideoNode ? "下载视频" : "下载图片"}
           />
         ) : null}
-        canRun={isAiNode || isImageGeneratorNode || isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode}
+        canRun={(isAiNode && !isPromptPlannerNode) || isImageGeneratorNode || (isPromptPlannerNode && configuredPromptModels.length > 0) || (isMinimaxH3VideoNode && configuredH3VideoModels.length > 0)}
         onRun={run}
         runState={data.runState}
         title={displayTitle}
       />
-      <div className="px-[18px] pb-[18px]">{renderContent(id, data)}</div>
+      <div className="cursor-default px-[18px] pb-[18px]">{renderContent(id, data)}</div>
       {isImageNode && data.generatedBy && data.modelId ? (
-        <div className="pointer-events-none absolute bottom-[5px] left-[18px] right-[18px] truncate text-center text-[8px] font-medium leading-none text-[#A3A9B5]" title={data.modelId}>
-          {data.modelId}
+        <div className="pointer-events-none absolute bottom-[5px] left-[18px] right-[18px] truncate text-center text-[8px] font-medium leading-none text-[#A3A9B5]" title={data.title?.startsWith("分镜头 ") ? `${data.title} · ${data.modelId}` : data.modelId}>
+          {data.title?.startsWith("分镜头 ") ? `${data.title} · ` : ""}{data.modelId}
         </div>
       ) : null}
-      {(isImageGeneratorNode || isPromptPlannerNode) && data.runState === "failed" && data.errorMessage ? (
+      {(isImageGeneratorNode || isPromptPlannerNode) && !isMinimaxH3PromptNode && data.runState === "failed" && data.errorMessage ? (
         <div className="absolute bottom-3 left-[18px] right-[18px] truncate text-[11px] font-semibold text-danger" title={data.errorMessage}>
           {data.errorMessage}
         </div>
@@ -324,15 +484,26 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
 
 function renderContent(id: string, data: CanvasNodeData) {
   if (data.kind === "image") {
-    return <ImageUploadArea id={id} imageUrl={data.imageUrl} />;
+    return <ImageUploadArea height={Math.max(121, Number(data.height ?? 260) - 74)} id={id} imageUrl={data.imageUrl} />;
+  }
+
+  if (data.kind === "video") {
+    return <VideoUploadArea height={Math.max(246, Number(data.height ?? 520) - 74)} id={id} videoName={data.videoName} videoUrl={data.videoUrl} />;
   }
 
   if (data.kind === "prompt") {
-    return <PromptTextArea id={id} richHtml={typeof data.promptRichHtml === "string" ? data.promptRichHtml : buildVisibleTextPromptRichHtml(data.prompt ?? "")} value={data.prompt ?? ""} />;
+    return <PromptTextArea height={Math.max(121, Number(data.height ?? 260) - 74)} id={id} richHtml={typeof data.promptRichHtml === "string" ? data.promptRichHtml : buildVisibleTextPromptRichHtml(data.prompt ?? "")} scale={Math.min(3, Math.max(0.75, Number(data.width ?? 320) / 320))} value={data.prompt ?? ""} />;
   }
+
+  if (data.kind === "videoDirector") return <VideoDirectorPanel id={id} data={data} />;
+  if (data.kind === "minimaxH3Prompt") return <MinimaxH3PromptPanel id={id} data={data} />;
+  if (data.kind === "minimaxH3Video") return <MinimaxH3VideoPanel id={id} data={data} />;
 
   if (data.kind === "generateImage") {
     return <GenerateImagePanel id={id} data={data} />;
+  }
+  if (data.kind === "storyboardImage") {
+    return <GenerateImagePanel id={id} data={data} storyboardMode />;
   }
   if (data.kind === "imageTextEditor") {
     return <ImageTextEditorPanel id={id} data={data} />;
@@ -1187,6 +1358,183 @@ function ReferenceWeightControl({
   );
 }
 
+function MinimaxH3PromptPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const locked = data.runState === "running";
+  const { modelDisplayName, modelId, modelOptions } = usePromptPlannerModel(data);
+  const params = {
+    duration: "5",
+    mode: "自动判断",
+    shotStructure: "自动",
+    soundStrategy: "自动规划",
+    ...(data.modelParams ?? {})
+  };
+  const updateParams = (next: Record<string, string>) => {
+    if (locked) return;
+    updateNodeData(id, { modelId, modelParams: { ...params, ...next } });
+  };
+
+  useEffect(() => {
+    if (locked || data.modelId === modelId) return;
+    updateNodeData(id, { modelId });
+  }, [data.modelId, id, locked, modelId, updateNodeData]);
+
+  useEffect(() => {
+    const duration = Number(params.duration);
+    if (locked || (Number.isInteger(duration) && duration >= 5 && duration <= 15)) return;
+    updateNodeData(id, { modelParams: { ...params, duration: "5" } });
+  }, [id, locked, params, updateNodeData]);
+
+  return (
+    <div className="nodrag nopan nowheel grid gap-3">
+      <GenerateSelect
+        disabled={locked}
+        label="LLM 大模型"
+        onChange={(value) => updateNodeData(id, { modelId: value })}
+        options={modelOptions}
+        renderValue={modelDisplayName}
+        value={modelId}
+      />
+      <GenerateSelect disabled={locked} label="生成模式" onChange={(value) => updateParams({ mode: value })} options={["自动判断", "T2VA 文生视频", "I2VA 首帧生视频", "FL2VA 首尾帧生视频", "L2VA 尾帧生视频", "Full-Reference 多模态"]} value={params.mode} />
+      <GenerateSelect disabled={locked} label="视频时长" onChange={(value) => updateParams({ duration: value.replace(" 秒", "") })} options={Array.from({ length: 11 }, (_, index) => `${index + 5} 秒`)} value={`${Math.min(15, Math.max(5, Number(params.duration) || 5))} 秒`} />
+      <GenerateSelect disabled={locked} label="镜头结构" onChange={(value) => updateParams({ shotStructure: value })} options={["自动", "单镜头", "多镜头"]} value={params.shotStructure} />
+      <GenerateSelect disabled={locked} label="声音策略" onChange={(value) => updateParams({ soundStrategy: value })} options={["自动规划", "仅环境音", "环境音与配乐", "完全静音"]} value={params.soundStrategy} />
+      <div className="rounded-[12px] border border-[#FFE1B8] bg-[#FFF8EE] px-4 py-2.5 text-[11px] font-semibold leading-5 text-[#9A5A12]">
+        输入：连接 Prompt。输出：按 MiniMax H3 官方规则扩展的英文视频 Prompt；仅保留用户明确指定的画面文字。
+      </div>
+      {data.runState === "failed" && data.errorMessage ? (
+        <div className="rounded-[10px] border border-[#FFD5D5] bg-[#FFF5F5] px-3 py-2 text-[11px] font-semibold leading-4 text-danger" title={data.errorMessage}>
+          {data.errorMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MinimaxH3VideoPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const locked = data.runState === "running";
+  const modelOptions = useConfiguredH3VideoModels(data.modelId);
+  const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId)
+    ? data.modelId
+    : modelOptions[0] ?? "";
+  const params = {
+    generationType: "text",
+    ratio: "16:9",
+    resolution: "2K",
+    duration: "5",
+    ...(data.modelParams ?? {})
+  };
+  const typeOptions = ["文生视频", "首尾帧生视频", "多模态生视频"];
+  const typeValue = params.generationType === "firstLast" ? "首尾帧生视频" : params.generationType === "multimodal" ? "多模态生视频" : "文生视频";
+  const ratioOptions = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
+  const ratioValue = ratioOptions.includes(params.ratio) ? params.ratio : "16:9";
+  const updateParams = (next: Record<string, string>) => {
+    if (locked) return;
+    updateNodeData(id, { modelId: modelId || undefined, modelParams: { ...params, ...next } });
+  };
+  useEffect(() => {
+    if (locked || data.modelId === modelId) return;
+    updateNodeData(id, { modelId: modelId || undefined });
+  }, [data.modelId, id, locked, modelId, updateNodeData]);
+  useEffect(() => {
+    const duration = Number(params.duration);
+    if (locked || (Number.isInteger(duration) && duration >= 5 && duration <= 15)) return;
+    updateNodeData(id, { modelParams: { ...params, duration: "5", resolution: "2K" } });
+  }, [id, locked, params, updateNodeData]);
+  return (
+    <div className="nodrag nopan nowheel grid gap-3">
+      <GenerateSelect
+        disabled={locked || modelOptions.length === 0}
+        label="模型"
+        onChange={(value) => updateNodeData(id, { modelId: value })}
+        options={modelOptions.length ? modelOptions : ["未读取到 MiniMax-H3 模型"]}
+        renderValue={(value) => value}
+        value={modelId || "未读取到 MiniMax-H3 模型"}
+      />
+      <GenerateSelect
+        disabled={locked}
+        label="类型"
+        onChange={(value) => {
+          const generationType = value === "首尾帧生视频" ? "firstLast" : value === "多模态生视频" ? "multimodal" : "text";
+          updateParams({ generationType, ratio: ratioOptions.includes(params.ratio) ? params.ratio : "16:9" });
+        }}
+        options={typeOptions}
+        value={typeValue}
+      />
+      <GenerateSelect
+        disabled={locked}
+        label="画面比例"
+        onChange={(value) => updateParams({ ratio: value })}
+        options={ratioOptions}
+        value={ratioValue}
+      />
+      <GenerateSelect disabled label="分辨率" onChange={() => undefined} options={["2K"]} value="2K" />
+      <GenerateSelect disabled={locked} label="视频时长" onChange={(value) => updateParams({ duration: value.replace(" 秒", "") })} options={Array.from({ length: 11 }, (_, index) => `${index + 5} 秒`)} value={`${Math.min(15, Math.max(5, Number(params.duration) || 5))} 秒`} />
+      <div className="rounded-[12px] border border-[#FFE1B8] bg-[#FFF8EE] px-4 py-2.5 text-[11px] font-semibold leading-5 text-[#9A5A12]">
+        {params.generationType === "firstLast"
+          ? "输入：Prompt + 2 张图片；按画布位置依次作为首帧、尾帧。"
+          : params.generationType === "multimodal"
+            ? "输入：Prompt + 1–5 张参考图片；12API H3 暂不支持参考视频。"
+            : "输入：连接 1 个 Prompt 文本节点。"}
+      </div>
+      {data.runState === "failed" && data.errorMessage ? (
+        <div className="rounded-[10px] border border-[#FFD5D5] bg-[#FFF5F5] px-3 py-2 text-[11px] font-semibold leading-4 text-danger" title={data.errorMessage}>
+          {data.errorMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function VideoDirectorPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const locked = data.runState === "running";
+  const { modelDisplayName, modelId, modelOptions } = usePromptPlannerModel(data);
+  const params = data.modelParams ?? {};
+  const values = {
+    duration: params.duration ?? "30",
+    aspectRatio: params.aspectRatio ?? "16:9 横屏",
+    adType: params.adType ?? "产品宣传片",
+    shotCount: params.shotCount ?? "自动",
+    pacing: params.pacing ?? "标准",
+    productLock: params.productLock ?? "严格",
+    outputLanguage: params.outputLanguage ?? "中文",
+    creativeDirection: params.creativeDirection ?? "自动策划",
+    voiceover: params.voiceover ?? "简短旁白",
+    screenCopy: params.screenCopy ?? "不需要",
+    detailLevel: params.detailLevel ?? "专业"
+  };
+  const update = (key: string, value: string) => !locked && updateNodeData(id, { modelParams: { ...params, [key]: value } });
+  const group = (title: string, children: React.ReactNode) => <section className="rounded-[14px] border border-[#E1E5EE] bg-white/80 p-4"><h3 className="mb-3 text-[14px] font-bold text-primary">{title}</h3><div className="grid grid-cols-2 gap-x-7 gap-y-4">{children}</div></section>;
+  return (
+    <div className="nodrag nopan nowheel grid gap-3 overflow-visible pr-1 pt-1">
+      {group("模型与输出", <>
+        <GenerateSelect disabled={locked} label="LLM 大模型" onChange={(value) => updateNodeData(id, { modelId: value })} options={modelOptions} renderValue={modelDisplayName} value={modelId} />
+        <GenerateSelect disabled={locked} label="输出语言" onChange={(value) => update("outputLanguage", value)} options={["中文", "英文", "中英双语"]} value={values.outputLanguage} />
+        <GenerateSelect disabled={locked} label="输出详细程度" onChange={(value) => update("detailLevel", value)} options={["精简", "标准", "专业"]} value={values.detailLevel} />
+      </>)}
+      {group("视频规格", <>
+        <GenerateNumberInput disabled={locked} label="视频总时长（秒）" max={180} min={5} onChange={(value) => update("duration", value)} value={values.duration} />
+        <GenerateSelect disabled={locked} label="画幅比例" onChange={(value) => update("aspectRatio", value)} options={["自动", "16:9 横屏", "9:16 竖屏", "1:1 方形", "4:5 电商", "21:9 电影宽屏"]} value={values.aspectRatio} />
+      </>)}
+      {group("广告策划", <>
+        <GenerateSelect disabled={locked} label="广告类型" onChange={(value) => update("adType", value)} options={["产品宣传片", "产品发布片", "电商广告", "功能演示", "品牌形象片", "社交媒体短片", "使用教程", "产品故事片"]} value={values.adType} />
+        <GenerateSelect disabled={locked} label="创意方向" onChange={(value) => update("creativeDirection", value)} options={["自动策划", "高级商业广告", "科技感", "极简高级", "电影感", "生活方式", "强功能展示", "电商转化"]} value={values.creativeDirection} />
+        <GenerateSelect disabled={locked} label="产品锁定" onChange={(value) => update("productLock", value)} options={["严格", "标准", "灵活"]} value={values.productLock} />
+      </>)}
+      {group("分镜编排", <>
+        <GenerateSelect disabled={locked} label="分镜数量" onChange={(value) => update("shotCount", value)} options={["自动", ...Array.from({ length: 29 }, (_, index) => String(index + 2))]} value={values.shotCount} />
+        <GenerateSelect disabled={locked} label="视频节奏" onChange={(value) => update("pacing", value)} options={["自动", "舒缓", "标准", "紧凑", "强节奏", "先慢后快", "先快后慢"]} value={values.pacing} />
+      </>)}
+      {group("声音与文案", <>
+        <GenerateSelect disabled={locked} label="旁白" onChange={(value) => update("voiceover", value)} options={["不需要", "自动生成", "简短旁白", "完整旁白", "只在开头", "只在结尾"]} value={values.voiceover} />
+        <GenerateSelect disabled={locked} label="屏幕文案" onChange={(value) => update("screenCopy", value)} options={["不需要", "自动生成", "产品卖点", "参数信息", "品牌口号", "使用前置 Prompt 文案"]} value={values.screenCopy} />
+      </>)}
+    </div>
+  );
+}
+
 function IndustrialDesignerPanel({ id, data }: { id: string; data: CanvasNodeData }) {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const locked = data.runState === "running";
@@ -1399,7 +1747,7 @@ function VisualDirectorPanel({ id, data }: { id: string; data: CanvasNodeData })
   );
 }
 
-function GenerateImagePanel({ id, data, showGridOption = true }: { id: string; data: CanvasNodeData; showGridOption?: boolean }) {
+function GenerateImagePanel({ id, data, showGridOption = true, storyboardMode = false }: { id: string; data: CanvasNodeData; showGridOption?: boolean; storyboardMode?: boolean }) {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const promptCount = useCanvasStore((state) => state.edges
     .filter((edge) => edge.target === id && edge.targetHandle === "text-in")
@@ -1509,11 +1857,11 @@ function GenerateImagePanel({ id, data, showGridOption = true }: { id: string; d
             value={gridEnabled ? "1" : params.imageCount ?? "1"}
           />
           <label className="flex h-8 items-center justify-between rounded-[16px] border border-[#D9DDE6] bg-[#F6F7FA] px-4 text-[15px] font-semibold text-[#525866]">
-            <span>宫图</span>
+            <span>{storyboardMode ? "多图" : "宫图"}</span>
             <span className="flex items-center gap-3">
               {gridEnabled ? (
                 <span className={promptCount > 10 ? "text-danger" : "text-[#7C7F86]"}>
-                  {promptCount > 10 ? "10+" : `${promptCount || 0} 宫`}
+                  {promptCount > 10 ? "10+" : storyboardMode ? `${promptCount || 0} 张` : `${promptCount || 0} 宫`}
                 </span>
               ) : null}
               <input
@@ -1538,6 +1886,11 @@ function GenerateImagePanel({ id, data, showGridOption = true }: { id: string; d
           value={params.imageCount ?? "1"}
         />
       )}
+      {storyboardMode ? (
+        <div className="rounded-[12px] border border-[#FFE1B8] bg-[#FFF8EE] px-4 py-2.5 text-[11px] font-semibold leading-5 text-[#9A5A12]">
+          分镜一致性：只代入 Prompt 指定的产品图片，严格锁定产品结构、比例、材质、颜色、Logo 与关键细节。
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2565,7 +2918,7 @@ function NodeModelSelect({ id, kind, value }: { id: string; kind: "image" | "tex
   );
 }
 
-function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
+function ImageUploadArea({ height, id, imageUrl }: { height: number; id: string; imageUrl?: string }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setImagePreviewUrl = useCanvasStore((state) => state.setImagePreviewUrl);
@@ -2587,7 +2940,11 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
   return (
     <button
       aria-label="上传图片"
-      className="nodrag nopan flex h-[186px] w-full cursor-pointer items-center justify-center overflow-hidden rounded-[12px] border border-[#ECEFF5] bg-[#F5F6FA] p-0 transition hover:border-[#D9DDEA] hover:bg-[#F3F5F9]"
+      className={`nodrag nopan flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-[12px] border bg-[#F5F6FA] p-0 transition ${
+        imageUrl
+          ? "border-[#ECEFF5] hover:border-[#D9DDEA] hover:bg-[#F3F5F9]"
+          : "border-dashed border-[#D9DDEA] text-secondary hover:border-[#2ECC71] hover:bg-[#F0FBF5] hover:text-[#168A48]"
+      }`}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => {
         event.preventDefault();
@@ -2599,7 +2956,7 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
         openPicker();
       }}
       onPointerDown={(event) => event.stopPropagation()}
-      style={{ lineHeight: 0 }}
+      style={{ height, lineHeight: 0 }}
       title="双击上传图片"
       type="button"
     >
@@ -2626,13 +2983,79 @@ function ImageUploadArea({ id, imageUrl }: { id: string; imageUrl?: string }) {
           }}
         />
       ) : (
-        <span className="grid h-full place-items-center text-sm text-secondary">Image</span>
+        <span className="grid h-full place-items-center text-sm font-semibold">点击上传或拖入图片</span>
       )}
       <input
         accept="image/png,image/jpeg,image/jpg,image/webp"
         className="hidden"
         onChange={(event) => {
           readImage(event.currentTarget.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+        ref={inputRef}
+        type="file"
+      />
+    </button>
+  );
+}
+
+function VideoUploadArea({ height, id, videoName, videoUrl }: { height: number; id: string; videoName?: string; videoUrl?: string }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+
+  const readVideo = (file?: File) => {
+    if (!file || !isSupportedVideoFile(file)) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateNodeData(id, {
+        runState: "idle",
+        videoName: file.name,
+        videoType: file.type,
+        videoUrl: String(reader.result)
+      }, { record: true });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (videoUrl) {
+    return (
+      <div className="nodrag nopan overflow-hidden rounded-[12px] border border-[#ECEFF5] bg-black" onPointerDown={(event) => event.stopPropagation()}>
+        <video
+          className="block w-full bg-black object-contain"
+          controls
+          playsInline
+          preload="metadata"
+          src={videoUrl}
+          style={{ height: Math.max(180, height - 32) }}
+        >
+          当前浏览器无法播放这个视频格式。
+        </video>
+        <div className="truncate bg-[#F5F6FA] px-3 py-2 text-[11px] font-semibold leading-4 text-secondary" title={videoName}>
+          {videoName || "本地视频"}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      aria-label="上传视频"
+      className="nodrag nopan flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-[12px] border border-dashed border-[#D9DDEA] bg-[#F5F6FA] p-0 text-sm font-semibold text-secondary transition hover:border-[#FF8A00] hover:bg-[#FFF7ED] hover:text-[#C65F00]"
+      onClick={(event) => {
+        event.stopPropagation();
+        inputRef.current?.click();
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      style={{ height }}
+      title="点击上传，或把视频拖入画布"
+      type="button"
+    >
+      点击上传或拖入视频
+      <input
+        accept={acceptedVideoFileTypes}
+        className="hidden"
+        onChange={(event) => {
+          readVideo(event.currentTarget.files?.[0]);
           event.currentTarget.value = "";
         }}
         ref={inputRef}
@@ -2649,7 +3072,7 @@ function sanitizeInlinePromptHtml(value: string) {
     .replace(/\son\w+=["'][^"']*["']/gi, "");
 }
 
-function PromptTextArea({ id, richHtml, value }: { id: string; richHtml?: string; value: string }) {
+function PromptTextArea({ height, id, richHtml, scale, value }: { height: number; id: string; richHtml?: string; scale: number; value: string }) {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const saveHistory = useCanvasStore((state) => state.saveHistory);
   const nodes = useCanvasStore((state) => state.nodes);
@@ -2726,8 +3149,9 @@ function PromptTextArea({ id, richHtml, value }: { id: string; richHtml?: string
     return (
       <div className="relative">
         <div
-          className="nodrag nopan nowheel h-[186px] overflow-y-auto whitespace-pre-wrap rounded-[12px] border border-[#F2DFB8] bg-[#FFFDF8] p-4 text-sm leading-6 text-primary outline-none"
+          className="nodrag nopan nowheel overflow-y-auto whitespace-pre-wrap rounded-[12px] border border-[#F2DFB8] bg-[#FFFDF8] p-4 text-sm leading-6 text-primary outline-none"
           dangerouslySetInnerHTML={{ __html: sanitizeInlinePromptHtml(richHtml) }}
+          style={{ fontSize: 14 * scale, height, lineHeight: `${24 * scale}px` }}
         />
       </div>
     );
@@ -2736,7 +3160,7 @@ function PromptTextArea({ id, richHtml, value }: { id: string; richHtml?: string
   return (
     <div className="relative">
       <textarea
-        className="nodrag nopan nowheel h-[186px] w-full resize-none rounded-[12px] border border-[#F2DFB8] bg-[#FFFDF8] p-4 text-sm leading-6 text-primary outline-none placeholder:text-secondary focus:border-[#E4C47F]"
+        className="nodrag nopan nowheel w-full resize-none rounded-[12px] border border-[#F2DFB8] bg-[#FFFDF8] p-4 text-sm leading-6 text-primary outline-none placeholder:text-secondary focus:border-[#E4C47F] focus-visible:outline-none"
         onChange={(event) => {
           const next = event.currentTarget.value;
           setDraft(next);
@@ -2810,6 +3234,7 @@ function PromptTextArea({ id, richHtml, value }: { id: string; richHtml?: string
         onPointerUp={(event) => event.stopPropagation()}
         placeholder="输入提示词"
         ref={textareaRef}
+        style={{ fontSize: 14 * scale, height, lineHeight: `${24 * scale}px`, outline: "none" }}
         value={draft}
       />
       {mentionQuery !== null && filteredMentions.length ? (

@@ -1,5 +1,5 @@
-export type NodeKind = "image" | "prompt" | "imageChat" | "sceneDirector" | "mosquitoSceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "imageTextEditor" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "mosquitoSceneImage" | "productRetouch" | "industrialDesignImage" | "productRemix" | "group";
-export type PortType = "image" | "text";
+export type NodeKind = "image" | "video" | "prompt" | "imageChat" | "sceneDirector" | "videoDirector" | "minimaxH3Prompt" | "minimaxH3Video" | "storyboardImage" | "mosquitoSceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "imageTextEditor" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "mosquitoSceneImage" | "productRetouch" | "industrialDesignImage" | "productRemix" | "group";
+export type PortType = "image" | "video" | "text";
 export type PortDirection = "input" | "output";
 export type RunState = "idle" | "running" | "completed" | "failed";
 export type NodeMotionState = "entering" | "duplicating" | "deleting";
@@ -14,8 +14,14 @@ export interface Port {
 export interface CanvasNodeData extends Record<string, unknown> {
   kind: NodeKind;
   title: string;
+  width?: number;
+  height?: number;
   imageUrl?: string;
   imageNumber?: number;
+  videoUrl?: string;
+  videoNumber?: number;
+  videoName?: string;
+  videoType?: string;
   prompt?: string;
   promptTextColor?: string;
   promptRichHtml?: string;
@@ -39,6 +45,10 @@ export const portsByNode: Record<NodeKind, Port[]> = {
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
   ],
+  video: [
+    { id: "video-in", type: "video", direction: "input", color: "#FF8A00" },
+    { id: "video-out", type: "video", direction: "output", color: "#FF8A00" }
+  ],
   prompt: [
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
@@ -52,6 +62,22 @@ export const portsByNode: Record<NodeKind, Port[]> = {
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
+  ],
+  videoDirector: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "video-in", type: "video", direction: "input", color: "#FF8A00" },
+    { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
+  ],
+  minimaxH3Prompt: [
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "text-out", type: "text", direction: "output", color: "#FFC928" }
+  ],
+  minimaxH3Video: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "video-in", type: "video", direction: "input", color: "#FF8A00" },
+    { id: "video-out", type: "video", direction: "output", color: "#FF8A00" }
   ],
   mosquitoSceneDirector: [
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
@@ -84,6 +110,11 @@ export const portsByNode: Record<NodeKind, Port[]> = {
     { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
   ],
   generateImage: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
+  ],
+  storyboardImage: [
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "image-out", type: "image", direction: "output", color: "#2ECC71" }
@@ -147,9 +178,13 @@ export const portsByNode: Record<NodeKind, Port[]> = {
 
 export const nodeLabels: Record<NodeKind, string> = {
   image: "Image",
+  video: "Video",
   prompt: "Prompt",
   imageChat: "AI Prompt",
   sceneDirector: "Scene Director",
+  videoDirector: "视频大导演",
+  minimaxH3Prompt: "MiniMax H3 提示词",
+  minimaxH3Video: "MiniMax H3 视频",
   mosquitoSceneDirector: "灭蚊场景导演",
   taobaoPageDirector: "Taobao Page Director",
   industrial_designer: "Industrial Designer",
@@ -157,6 +192,7 @@ export const nodeLabels: Record<NodeKind, string> = {
   visual_director: "Visual Director",
   multiGenerate: "Multi Generate",
   generateImage: "Generate Image",
+  storyboardImage: "分镜图",
   imageTextEditor: "图片文字修改",
   hdRedraw: "高清重绘1",
   hdRedraw2: "高清重绘2",
@@ -174,6 +210,7 @@ export const nodeLabels: Record<NodeKind, string> = {
 export function getHandlePortType(handleId?: string | null): PortType | null {
   if (!handleId) return null;
   if (handleId.startsWith("image")) return "image";
+  if (handleId.startsWith("video")) return "video";
   if (handleId.startsWith("text")) return "text";
   return null;
 }

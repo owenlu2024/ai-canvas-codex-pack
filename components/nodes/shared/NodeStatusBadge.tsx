@@ -20,7 +20,7 @@ export function NodeStatusBadge({ runState }: { runState?: RunState }) {
   const state = runState ?? "idle";
 
   return (
-    <span className={`inline-flex h-[22px] items-center rounded-full border px-2.5 text-[11px] font-semibold leading-[14px] tracking-[0.01em] ${statusClasses[state]}`}>
+    <span className={`inline-flex h-[22px] cursor-inherit items-center rounded-full border px-2.5 text-[11px] font-semibold leading-[14px] tracking-[0.01em] ${statusClasses[state]}`}>
       {statusLabels[state]}
     </span>
   );

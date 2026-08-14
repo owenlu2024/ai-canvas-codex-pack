@@ -64,12 +64,17 @@ export async function readApiSettings(settingsPath: string, options: ReadSetting
   const isAgnes = Boolean(options.isAgnesModel?.(parsed.modelId));
   const selectedClientSource = parsed.apiId
     ? options.clientSettings?.apiConfigs?.find((config) => config.id === parsed.apiId)
-      ?? (parsed.apiId === "001" ? options.clientSettings?.settings : parsed.apiId === "002" ? options.clientSettings?.agnesSettings : undefined)
+      ?? (parsed.apiId === "001" && !options.clientSettings?.apiConfigs?.length ? options.clientSettings?.settings : undefined)
+      ?? (parsed.apiId === "002" && isAgnes && !options.clientSettings?.apiConfigs?.length ? options.clientSettings?.agnesSettings : undefined)
     : undefined;
   const selectedSource = parsed.apiId
     ? saved.apiConfigs?.find((config) => config.id === parsed.apiId)
-      ?? (parsed.apiId === "001" ? saved.settings : parsed.apiId === "002" ? saved.agnesSettings : undefined)
+      ?? (parsed.apiId === "001" && !saved.apiConfigs?.length ? saved.settings : undefined)
+      ?? (parsed.apiId === "002" && isAgnes && !saved.apiConfigs?.length ? saved.agnesSettings : undefined)
     : undefined;
+  if (parsed.apiId && !selectedClientSource && !selectedSource) {
+    return { apiKey: "", baseUrl: "" };
+  }
   const clientSource = selectedClientSource ?? (isAgnes ? options.clientSettings?.agnesSettings : options.clientSettings?.settings);
   const source = selectedSource ?? (isAgnes ? saved.agnesSettings : saved.settings);
   const envSettings = readEnvApiSettings(options);
@@ -77,6 +82,6 @@ export async function readApiSettings(settingsPath: string, options: ReadSetting
 
   return {
     apiKey: clientSource?.apiKey?.trim() || source?.apiKey?.trim() || envSettings.apiKey,
-    baseUrl: options.normalizeBaseUrl(clientSource?.baseUrl ?? source?.baseUrl ?? (envSettings.baseUrl || fallbackBaseUrl))
+    baseUrl: options.normalizeBaseUrl(clientSource?.baseUrl?.trim() || source?.baseUrl?.trim() || envSettings.baseUrl || fallbackBaseUrl)
   };
 }

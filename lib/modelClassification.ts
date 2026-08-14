@@ -1,7 +1,7 @@
 export type AiModelKind = "image" | "text" | "video";
 
 const videoModelHints = [
-  "seedance", "veo", "sora", "kling", "runway", "hailuo", "minimax-video",
+  "seedance", "veo", "sora", "kling", "runway", "hailuo", "minimax-video", "minimax-h3",
   "wan-video", "wan2", "vidu", "luma-ray", "dream-machine", "pika"
 ];
 

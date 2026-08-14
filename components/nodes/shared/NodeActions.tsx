@@ -16,6 +16,7 @@ interface NodeActionsProps {
   showEdit: boolean;
   showCopyPrompt: boolean;
   showDownloadImage: boolean;
+  downloadLabel?: string;
 }
 
 export function NodeActions({
@@ -30,10 +31,11 @@ export function NodeActions({
   onEdit,
   showEdit,
   showCopyPrompt,
-  showDownloadImage
+  showDownloadImage,
+  downloadLabel = "下载图片"
 }: NodeActionsProps) {
   return (
-    <div className="ml-2 flex h-[30px] items-center gap-1">
+    <div className="nodrag ml-2 flex h-[30px] items-center gap-1">
       {showEdit ? (
         <IconActionButton
           disabled={!canEdit}
@@ -47,9 +49,9 @@ export function NodeActions({
       {showDownloadImage ? (
         <IconActionButton
           disabled={!canDownloadImage}
-          label="下载图片"
+          label={downloadLabel}
           onClick={onDownloadImage}
-          title="下载图片"
+          title={downloadLabel}
         >
           <Download size={17} strokeWidth={1.9} />
         </IconActionButton>
@@ -87,7 +89,7 @@ function IconActionButton({
   return (
     <button
       aria-label={label}
-      className={`apple-pressable grid h-[30px] w-[30px] place-items-center rounded-[9px] ${
+      className={`apple-pressable nodrag grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-[9px] ${
         disabled ? "text-[#AEAEB2]" : "text-primary hover:bg-[var(--surface-control)]"
       }`}
       disabled={disabled}
