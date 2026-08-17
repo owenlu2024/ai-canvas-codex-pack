@@ -112,7 +112,9 @@ const categories: AddNodeCategory[] = [
       { kind: "storyboardImage", label: "分镜图", description: "产品一致性分镜生图" }
     ],
     imageOptions: [
-      { kind: "minimaxH3Video", label: "MiniMax H3 视频", description: "文生、首尾帧与多模态视频" }
+      { kind: "minimaxH3Video", label: "MiniMax H3 视频", description: "文生、首尾帧与多模态视频" },
+      { kind: "seedanceVideo", label: "Seedance 视频", description: "2.0、Fast 与 2.5 视频生成" },
+      { kind: "veo31Video", label: "Veo 3.1 视频", description: "文生、参考图与首尾帧视频" }
     ]
   }
 ];

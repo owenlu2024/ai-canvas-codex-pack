@@ -1,4 +1,4 @@
-export type NodeKind = "image" | "video" | "prompt" | "imageChat" | "sceneDirector" | "videoDirector" | "minimaxH3Prompt" | "minimaxH3Video" | "storyboardImage" | "mosquitoSceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "imageTextEditor" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "mosquitoSceneImage" | "productRetouch" | "industrialDesignImage" | "productRemix" | "group";
+export type NodeKind = "image" | "video" | "prompt" | "imageChat" | "sceneDirector" | "videoDirector" | "minimaxH3Prompt" | "minimaxH3Video" | "seedanceVideo" | "veo31Video" | "storyboardImage" | "mosquitoSceneDirector" | "taobaoPageDirector" | "industrial_designer" | "product_poster" | "visual_director" | "multiGenerate" | "generateImage" | "imageTextEditor" | "hdRedraw" | "hdRedraw2" | "rhinoTest" | "textImageLayout" | "gridImage" | "sceneImage" | "mosquitoSceneImage" | "productRetouch" | "industrialDesignImage" | "productRemix" | "group";
 export type PortType = "image" | "video" | "text";
 export type PortDirection = "input" | "output";
 export type RunState = "idle" | "running" | "completed" | "failed";
@@ -75,8 +75,22 @@ export const portsByNode: Record<NodeKind, Port[]> = {
   ],
   minimaxH3Video: [
     { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "image-end-in", type: "image", direction: "input", color: "#2ECC71" },
     { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "video-in", type: "video", direction: "input", color: "#FF8A00" },
+    { id: "video-out", type: "video", direction: "output", color: "#FF8A00" }
+  ],
+  seedanceVideo: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "image-end-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
+    { id: "video-in", type: "video", direction: "input", color: "#FF8A00" },
+    { id: "video-out", type: "video", direction: "output", color: "#FF8A00" }
+  ],
+  veo31Video: [
+    { id: "image-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "image-end-in", type: "image", direction: "input", color: "#2ECC71" },
+    { id: "text-in", type: "text", direction: "input", color: "#FFC928" },
     { id: "video-out", type: "video", direction: "output", color: "#FF8A00" }
   ],
   mosquitoSceneDirector: [
@@ -185,6 +199,8 @@ export const nodeLabels: Record<NodeKind, string> = {
   videoDirector: "视频大导演",
   minimaxH3Prompt: "MiniMax H3 提示词",
   minimaxH3Video: "MiniMax H3 视频",
+  seedanceVideo: "Seedance 视频",
+  veo31Video: "Veo 3.1 视频",
   mosquitoSceneDirector: "灭蚊场景导演",
   taobaoPageDirector: "Taobao Page Director",
   industrial_designer: "Industrial Designer",

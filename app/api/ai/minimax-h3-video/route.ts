@@ -21,6 +21,7 @@ const settingsPath = getCanvasDataPath("api-settings.local.json");
 const max12ApiPromptLength = 5000;
 const safe12ApiPromptLength = 4800;
 const allowedAspectRatios = new Set(["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+const allowedResolutions = new Set(["768P", "2K"]);
 
 function normalizeVideoApiRoot(value: string) {
   const url = parseHttpUrl(value.trim());
@@ -165,6 +166,8 @@ export async function POST(request: NextRequest) {
     const videos = (body.videos ?? []).filter((item) => item.url);
     if (videos.length) return NextResponse.json({ error: "12API 的 MiniMax-H3 当前不支持参考视频，请改用参考图片。" }, { status: 400 });
     if (!allowedAspectRatios.has(params.ratio ?? "16:9")) return NextResponse.json({ error: "MiniMax-H3 画面比例只允许 21:9、16:9、4:3、1:1、3:4 或 9:16。" }, { status: 400 });
+    const resolution = params.resolution ?? "2K";
+    if (!allowedResolutions.has(resolution)) return NextResponse.json({ error: "MiniMax-H3 分辨率只能是 768P 或 2K。" }, { status: 400 });
     const requestedDuration = Number.parseInt(params.duration ?? "5", 10);
     if (!Number.isInteger(requestedDuration) || requestedDuration < 5 || requestedDuration > 15) return NextResponse.json({ error: "MiniMax-H3 视频时长只能是 5–15 秒。" }, { status: 400 });
     if (generationType === "text" && images.length) return NextResponse.json({ error: "文生视频模式不能连接参考图片；请断开图片或改为多模态生视频。" }, { status: 400 });
@@ -176,7 +179,7 @@ export async function POST(request: NextRequest) {
       duration: requestedDuration,
       n: 1,
       prompt,
-      resolution: "2K"
+      resolution
     };
     if (generationType === "firstLast") {
       input.start_frames = [{ url: images[0].url as string }];
@@ -208,7 +211,7 @@ export async function POST(request: NextRequest) {
       });
       const reason = upstreamError(payload, `12API 提交失败 (${response.status})`);
       return NextResponse.json({
-        error: `${reason}；请求编号：${requestId}；提交路径：${submitUrl}；参数：MiniMax-H3 / ${String(input.aspect_ratio)} / 2K / ${String(input.duration)} 秒 / ${images.length} 张参考图`
+        error: `${reason}；请求编号：${requestId}；提交路径：${submitUrl}；参数：MiniMax-H3 / ${String(input.aspect_ratio)} / ${resolution} / ${String(input.duration)} 秒 / ${images.length} 张参考图`
       }, { status: response.status });
     }
     const taskId = typeof payload.id === "string" || typeof payload.id === "number" ? String(payload.id) : "";

@@ -53,6 +53,8 @@ const nodeTypes = {
   videoDirector: ImageChatNode,
   minimaxH3Prompt: ImageChatNode,
   minimaxH3Video: MultiGenerateNode,
+  seedanceVideo: MultiGenerateNode,
+  veo31Video: MultiGenerateNode,
   mosquitoSceneDirector: ImageChatNode,
   taobaoPageDirector: ImageChatNode,
   industrial_designer: ImageChatNode,
@@ -291,6 +293,7 @@ function sanitizePromptRichHtml(value: string) {
 }
 
 function isRunningLockingNode(node?: Node<CanvasNodeData>) {
+  if (node?.data.kind === "veo31Video" || node?.data.kind === "seedanceVideo") return node.data.runState === "running";
   return (node?.data.kind === "generateImage" || node?.data.kind === "storyboardImage" || node?.data.kind === "minimaxH3Prompt" || node?.data.kind === "minimaxH3Video" || node?.data.kind === "hdRedraw" || node?.data.kind === "hdRedraw2" || node?.data.kind === "rhinoTest" || node?.data.kind === "textImageLayout" || node?.data.kind === "gridImage" || node?.data.kind === "sceneImage" || node?.data.kind === "mosquitoSceneImage" || node?.data.kind === "productRetouch" || node?.data.kind === "industrialDesignImage" || node?.data.kind === "productRemix" || node?.data.kind === "imageChat" || node?.data.kind === "sceneDirector" || node?.data.kind === "videoDirector" || node?.data.kind === "mosquitoSceneDirector" || node?.data.kind === "taobaoPageDirector" || node?.data.kind === "industrial_designer" || node?.data.kind === "product_poster" || node?.data.kind === "visual_director") && node.data.runState === "running";
 }
 
@@ -532,6 +535,15 @@ export function AiCanvas() {
   const setImagePreviewUrl = useCanvasStore((state) => state.setImagePreviewUrl);
   const displayScale = useDisplayScale();
 
+  useEffect(() => {
+    document.documentElement.classList.add("ai-canvas-native-cursor-mode");
+    document.body.classList.add("ai-canvas-native-cursor-mode");
+    return () => {
+      document.documentElement.classList.remove("ai-canvas-native-cursor-mode");
+      document.body.classList.remove("ai-canvas-native-cursor-mode");
+    };
+  }, []);
+
   const sortedNodes = useMemo(() => [...nodes].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0)), [nodes]);
   const visibleEdges = useMemo(() => (showAutoImageLinks ? edges : edges.filter((edge) => !isAutoMentionImageEdge(edge))), [edges, showAutoImageLinks]);
   const promptEditorNode = useMemo(
@@ -632,7 +644,10 @@ export function AiCanvas() {
       const targetNode = nodes.find((node) => node.id === normalizedConnection.target);
       const sourcePortType = getHandlePortType(normalizedConnection.sourceHandle);
       if (!targetNode) return;
-      const targetHandle = getInputHandleForPortType(targetNode, sourcePortType);
+      const requestedTargetPort = portsByNode[targetNode.data.kind].find((port) => (
+        port.id === normalizedConnection.targetHandle && port.direction === "input" && port.type === sourcePortType
+      ));
+      const targetHandle = requestedTargetPort?.id ?? getInputHandleForPortType(targetNode, sourcePortType);
       if (!targetHandle) return;
       const sourceNodes = sourceNode?.selected
         ? nodes.filter((node) => node.selected && Boolean(getOutputHandleForPortType(node, sourcePortType)))
@@ -1008,6 +1023,7 @@ export function AiCanvas() {
   return (
     <div
       className={`absolute inset-0 ${middlePanning ? "canvas-middle-panning" : ""} ${connectingPortType ? `canvas-connecting canvas-connecting-${connectingPortType}` : ""}`}
+      id="ai-canvas-cursor-surface"
       onDoubleClickCapture={(event) => {
         if (event.button !== 0) return;
         const target = event.target;
