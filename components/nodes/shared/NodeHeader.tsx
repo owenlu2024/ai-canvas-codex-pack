@@ -17,7 +17,7 @@ export function NodeHeader({ actions, canRun, onRun, runState, title }: NodeHead
   const running = runState === "running";
 
   return (
-    <div className="ai-node-drag-handle flex h-[52px] cursor-grab items-center gap-3 px-[18px] active:cursor-grabbing">
+    <div className="ai-node-drag-handle flex h-[52px] cursor-pointer items-center gap-3 px-[18px] active:cursor-grabbing">
       <h2 className="min-w-0 flex-1 cursor-inherit truncate text-[17px] font-semibold leading-[22px] tracking-[-0.015em] text-primary" data-prompt-title-region="true">{title}</h2>
       <NodeStatusBadge runState={runState} />
       {canRun ? (

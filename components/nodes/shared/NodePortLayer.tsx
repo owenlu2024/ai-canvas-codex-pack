@@ -1,17 +1,36 @@
 "use client";
 
+import { useEffect } from "react";
+import { useUpdateNodeInternals } from "@xyflow/react";
 import { PortDot } from "@/components/nodes/PortDot";
 import { portsByNode, type NodeKind } from "@/lib/nodeTypes";
 
-export function NodePortLayer({ hiddenAutoImageInputCount, kind, nodeId }: { hiddenAutoImageInputCount: number; kind: NodeKind; nodeId: string }) {
+export function NodePortLayer({ generationType, hiddenAutoImageInputCount, kind, nodeId }: { generationType?: string; hiddenAutoImageInputCount: number; kind: NodeKind; nodeId: string }) {
+  const updateNodeInternals = useUpdateNodeInternals();
   const ports = portsByNode[kind];
-  const inputs = ports.filter((port) => port.direction === "input");
+  const isVideoGenerator = kind === "minimaxH3Video" || kind === "seedanceVideo" || kind === "veo31Video";
+  const isFirstLastMode = isVideoGenerator && generationType === "firstLast";
+  const inputs = ports.filter((port) => (
+    port.direction === "input" && (port.id !== "image-end-in" || isFirstLastMode)
+  ));
   const outputs = ports.filter((port) => port.direction === "output");
+
+  useEffect(() => {
+    updateNodeInternals(nodeId);
+  }, [isFirstLastMode, nodeId, updateNodeInternals]);
 
   return (
     <>
       {inputs.map((port, index) => (
-        <PortDot index={index} key={port.id} kind={kind} nodeId={nodeId} port={port} />
+        <PortDot
+          index={index}
+          inputCount={inputs.length}
+          key={port.id}
+          kind={kind}
+          label={isFirstLastMode && port.id === "image-in" ? "首帧" : isFirstLastMode && port.id === "image-end-in" ? "尾帧" : undefined}
+          nodeId={nodeId}
+          port={port}
+        />
       ))}
       {hiddenAutoImageInputCount ? <CollapsedAutoImageHint count={hiddenAutoImageInputCount} /> : null}
       {outputs.map((port, index) => (

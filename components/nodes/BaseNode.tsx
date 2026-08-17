@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Pencil } from "lucide-react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { getBaseModelId, getClientAiSettingsPayload, readClientAiSettings } from "@/lib/clientAiSettings";
@@ -93,6 +93,38 @@ function useConfiguredH3VideoModels(currentModel?: string) {
   }, [models]);
 }
 
+const seedanceModelIds = ["seedance-2.0", "seedance-2.0-fast", "seedance-2.5"] as const;
+const asyncVideoRatioOptions = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
+
+function useConfiguredSeedanceVideoModels(currentModel?: string) {
+  const fallbackOptions = useMemo(() => [], []);
+  const { loaded, models } = useConfiguredModels("video", fallbackOptions);
+  return useMemo(() => {
+    const filtered = models.filter((model) => seedanceModelIds.includes((getBaseModelId(model) ?? model) as typeof seedanceModelIds[number]));
+    if (!loaded && currentModel && !filtered.includes(currentModel)) {
+      const baseModel = getBaseModelId(currentModel) ?? currentModel;
+      if (seedanceModelIds.includes(baseModel as typeof seedanceModelIds[number])) return [currentModel, ...filtered];
+    }
+    return Array.from(new Set(filtered));
+  }, [currentModel, loaded, models]);
+}
+
+function useConfiguredVeo31VideoModels(currentModel?: string) {
+  const fallbackOptions = useMemo(() => [], []);
+  const { loaded, models } = useConfiguredModels("video", fallbackOptions);
+  return useMemo(() => {
+    const filtered = models.filter((model) => {
+      const baseModel = getBaseModelId(model) ?? model;
+      return baseModel === "veo-3.1-generate-preview" || baseModel === "veo-3.1-fast-generate-preview";
+    });
+    if (!loaded && currentModel && !filtered.includes(currentModel)) {
+      const baseModel = getBaseModelId(currentModel) ?? currentModel;
+      if (baseModel === "veo-3.1-generate-preview" || baseModel === "veo-3.1-fast-generate-preview") return [currentModel, ...filtered];
+    }
+    return Array.from(new Set(filtered));
+  }, [currentModel, loaded, models]);
+}
+
 function useConfiguredImageModels(fallbackOptions: string[], currentModel?: string) {
   const { loaded, models } = useConfiguredModels("image", fallbackOptions);
   const fallbackSet = useMemo(() => new Set(fallbackOptions), [fallbackOptions]);
@@ -137,6 +169,8 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const runVideoDirectorNode = useCanvasStore((state) => state.runVideoDirectorNode);
   const runMinimaxH3PromptNode = useCanvasStore((state) => state.runMinimaxH3PromptNode);
   const runMinimaxH3VideoNode = useCanvasStore((state) => state.runMinimaxH3VideoNode);
+  const runSeedanceVideoNode = useCanvasStore((state) => state.runSeedanceVideoNode);
+  const runVeo31VideoNode = useCanvasStore((state) => state.runVeo31VideoNode);
   const runTaobaoPageDirectorNode = useCanvasStore((state) => state.runTaobaoPageDirectorNode);
   const runIndustrialDesignerNode = useCanvasStore((state) => state.runIndustrialDesignerNode);
   const runProductPosterNode = useCanvasStore((state) => state.runProductPosterNode);
@@ -174,7 +208,11 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const isVideoDirectorNode = data.kind === "videoDirector";
   const isMinimaxH3PromptNode = data.kind === "minimaxH3Prompt";
   const isMinimaxH3VideoNode = data.kind === "minimaxH3Video";
+  const isSeedanceVideoNode = data.kind === "seedanceVideo";
+  const isVeo31VideoNode = data.kind === "veo31Video";
   const configuredH3VideoModels = useConfiguredH3VideoModels(data.modelId);
+  const configuredSeedanceVideoModels = useConfiguredSeedanceVideoModels(data.modelId);
+  const configuredVeo31VideoModels = useConfiguredVeo31VideoModels(data.modelId);
   const isMosquitoSceneDirectorNode = data.kind === "mosquitoSceneDirector";
   const isTaobaoPageDirectorNode = data.kind === "taobaoPageDirector";
   const isIndustrialDesignerNode = data.kind === "industrial_designer";
@@ -189,8 +227,8 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
   const imageNumber = isImageNode && typeof data.imageNumber === "number" ? String(data.imageNumber).padStart(3, "0") : null;
   const videoNumber = isVideoNode && typeof data.videoNumber === "number" ? String(data.videoNumber).padStart(3, "0") : null;
   const displayTitle = imageNumber ? `Image ${imageNumber}` : videoNumber ? `Video ${videoNumber}` : data.title;
-  const defaultNodeWidth = isVideoNode ? 640 : isVideoDirectorNode ? 620 : isMinimaxH3PromptNode || isMinimaxH3VideoNode ? 420 : isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageTextEditorNode ? 480 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
-  const defaultNodeHeight = isVideoNode ? 520 : isVideoDirectorNode ? 820 : isMinimaxH3PromptNode ? (data.runState === "failed" && data.errorMessage ? 500 : 430) : isMinimaxH3VideoNode ? (data.runState === "failed" && data.errorMessage ? 520 : 450) : isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isProductRetouchNode ? 620 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
+  const defaultNodeWidth = isVideoNode ? 640 : isVideoDirectorNode ? 620 : isMinimaxH3PromptNode || isMinimaxH3VideoNode || isSeedanceVideoNode || isVeo31VideoNode ? 420 : isSceneDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode ? 620 : isImageTextEditorNode ? 480 : isImageGeneratorNode || isAiPromptNode || isVisualDirectorNode ? 420 : 320;
+  const defaultNodeHeight = isVideoNode ? 520 : isVideoDirectorNode ? 820 : isMinimaxH3PromptNode ? (data.runState === "failed" && data.errorMessage ? 500 : 430) : isMinimaxH3VideoNode ? (data.runState === "failed" && data.errorMessage ? 520 : 450) : isSeedanceVideoNode ? (data.runState === "failed" && data.errorMessage ? 580 : 510) : isVeo31VideoNode ? (data.runState === "failed" && data.errorMessage ? 560 : 490) : isProductPosterNode ? 720 : isTaobaoPageDirectorNode ? 560 : isSceneDirectorNode ? 760 : isMosquitoSceneDirectorNode ? 760 : isIndustrialDesignerNode ? 620 : isImageTextEditorNode ? 520 : isVisualDirectorNode ? 400 : isProductRemixNode ? 500 : isProductRetouchNode ? 620 : isHdRedrawNode || isHdRedraw2Node ? 430 : isRhinoTestNode ? 450 : isMosquitoSceneImageNode ? 440 : isSceneImageNode || isIndustrialDesignImageNode ? 390 : isImageGeneratorNode || isAiPromptNode ? 360 : 260;
   const isResizableMediaNode = isImageNode || isVideoNode || isPromptNode;
   const nodeWidth = isResizableMediaNode ? Number(data.width ?? defaultNodeWidth) : defaultNodeWidth;
   const nodeHeight = isResizableMediaNode ? Number(data.height ?? defaultNodeHeight) : defaultNodeHeight;
@@ -397,6 +435,26 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
       void runMinimaxH3VideoNode(id, generationId);
       return;
     }
+    if (isSeedanceVideoNode) {
+      if (data.runState === "running") {
+        stopGenerateImageNode(id);
+        return;
+      }
+      const generationId = `${id}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
+      updateNodeData(id, { errorMessage: undefined, generationId, runState: "running" });
+      void runSeedanceVideoNode(id, generationId);
+      return;
+    }
+    if (isVeo31VideoNode) {
+      if (data.runState === "running") {
+        stopGenerateImageNode(id);
+        return;
+      }
+      const generationId = `${id}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
+      updateNodeData(id, { errorMessage: undefined, generationId, runState: "running" });
+      void runVeo31VideoNode(id, generationId);
+      return;
+    }
     if (isAiPromptNode || isSceneDirectorNode || isVideoDirectorNode || isMosquitoSceneDirectorNode || isTaobaoPageDirectorNode || isIndustrialDesignerNode || isProductPosterNode || isVisualDirectorNode) {
       if (data.runState === "running") {
         stopGenerateImageNode(id);
@@ -438,7 +496,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
       height={nodeHeight}
       motionState={data.motionState}
       nodeId={id}
-      portLayer={<NodePortLayer hiddenAutoImageInputCount={hiddenAutoImageInputCount} kind={data.kind} nodeId={id} />}
+      portLayer={<NodePortLayer generationType={data.modelParams?.generationType} hiddenAutoImageInputCount={hiddenAutoImageInputCount} kind={data.kind} nodeId={id} />}
       resizable={isResizableMediaNode}
       running={isRunning}
       selected={selected}
@@ -462,12 +520,12 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
             downloadLabel={isVideoNode ? "下载视频" : "下载图片"}
           />
         ) : null}
-        canRun={(isAiNode && !isPromptPlannerNode) || isImageGeneratorNode || (isPromptPlannerNode && configuredPromptModels.length > 0) || (isMinimaxH3VideoNode && configuredH3VideoModels.length > 0)}
+        canRun={(isAiNode && !isPromptPlannerNode) || isImageGeneratorNode || (isPromptPlannerNode && configuredPromptModels.length > 0) || (isMinimaxH3VideoNode && configuredH3VideoModels.length > 0) || (isSeedanceVideoNode && configuredSeedanceVideoModels.length > 0) || (isVeo31VideoNode && configuredVeo31VideoModels.length > 0)}
         onRun={run}
         runState={data.runState}
         title={displayTitle}
       />
-      <div className="cursor-default px-[18px] pb-[18px]">{renderContent(id, data)}</div>
+      <div className="cursor-pointer px-[18px] pb-[18px]">{renderContent(id, data)}</div>
       {isImageNode && data.generatedBy && data.modelId ? (
         <div className="pointer-events-none absolute bottom-[5px] left-[18px] right-[18px] truncate text-center text-[8px] font-medium leading-none text-[#A3A9B5]" title={data.title?.startsWith("分镜头 ") ? `${data.title} · ${data.modelId}` : data.modelId}>
           {data.title?.startsWith("分镜头 ") ? `${data.title} · ` : ""}{data.modelId}
@@ -498,6 +556,8 @@ function renderContent(id: string, data: CanvasNodeData) {
   if (data.kind === "videoDirector") return <VideoDirectorPanel id={id} data={data} />;
   if (data.kind === "minimaxH3Prompt") return <MinimaxH3PromptPanel id={id} data={data} />;
   if (data.kind === "minimaxH3Video") return <MinimaxH3VideoPanel id={id} data={data} />;
+  if (data.kind === "seedanceVideo") return <SeedanceVideoPanel id={id} data={data} />;
+  if (data.kind === "veo31Video") return <Veo31VideoPanel id={id} data={data} />;
 
   if (data.kind === "generateImage") {
     return <GenerateImagePanel id={id} data={data} />;
@@ -1418,16 +1478,16 @@ function MinimaxH3VideoPanel({ id, data }: { id: string; data: CanvasNodeData })
   const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId)
     ? data.modelId
     : modelOptions[0] ?? "";
-  const params = {
+  const params = useMemo(() => ({
     generationType: "text",
     ratio: "16:9",
     resolution: "2K",
     duration: "5",
     ...(data.modelParams ?? {})
-  };
+  }), [data.modelParams]);
   const typeOptions = ["文生视频", "首尾帧生视频", "多模态生视频"];
   const typeValue = params.generationType === "firstLast" ? "首尾帧生视频" : params.generationType === "multimodal" ? "多模态生视频" : "文生视频";
-  const ratioOptions = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
+  const ratioOptions = asyncVideoRatioOptions;
   const ratioValue = ratioOptions.includes(params.ratio) ? params.ratio : "16:9";
   const updateParams = (next: Record<string, string>) => {
     if (locked) return;
@@ -1439,8 +1499,9 @@ function MinimaxH3VideoPanel({ id, data }: { id: string; data: CanvasNodeData })
   }, [data.modelId, id, locked, modelId, updateNodeData]);
   useEffect(() => {
     const duration = Number(params.duration);
-    if (locked || (Number.isInteger(duration) && duration >= 5 && duration <= 15)) return;
-    updateNodeData(id, { modelParams: { ...params, duration: "5", resolution: "2K" } });
+    const resolution = ["768P", "2K"].includes(params.resolution) ? params.resolution : "2K";
+    if (locked || (Number.isInteger(duration) && duration >= 5 && duration <= 15 && resolution === params.resolution)) return;
+    updateNodeData(id, { modelParams: { ...params, duration: "5", resolution } });
   }, [id, locked, params, updateNodeData]);
   return (
     <div className="nodrag nopan nowheel grid gap-3">
@@ -1469,14 +1530,185 @@ function MinimaxH3VideoPanel({ id, data }: { id: string; data: CanvasNodeData })
         options={ratioOptions}
         value={ratioValue}
       />
-      <GenerateSelect disabled label="分辨率" onChange={() => undefined} options={["2K"]} value="2K" />
+      <GenerateSelect disabled={locked} label="分辨率" onChange={(value) => updateParams({ resolution: value })} options={["768P", "2K"]} value={["768P", "2K"].includes(params.resolution) ? params.resolution : "2K"} />
       <GenerateSelect disabled={locked} label="视频时长" onChange={(value) => updateParams({ duration: value.replace(" 秒", "") })} options={Array.from({ length: 11 }, (_, index) => `${index + 5} 秒`)} value={`${Math.min(15, Math.max(5, Number(params.duration) || 5))} 秒`} />
       <div className="rounded-[12px] border border-[#FFE1B8] bg-[#FFF8EE] px-4 py-2.5 text-[11px] font-semibold leading-5 text-[#9A5A12]">
         {params.generationType === "firstLast"
-          ? "输入：Prompt + 2 张图片；按画布位置依次作为首帧、尾帧。"
+          ? "输入：Prompt + 首帧、尾帧两个指定图片端口。"
           : params.generationType === "multimodal"
             ? "输入：Prompt + 1–5 张参考图片；12API H3 暂不支持参考视频。"
             : "输入：连接 1 个 Prompt 文本节点。"}
+      </div>
+      {data.runState === "failed" && data.errorMessage ? (
+        <div className="rounded-[10px] border border-[#FFD5D5] bg-[#FFF5F5] px-3 py-2 text-[11px] font-semibold leading-4 text-danger" title={data.errorMessage}>
+          {data.errorMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function getSeedancePanelSpec(modelId: string) {
+  const baseModel = getBaseModelId(modelId) ?? modelId;
+  if (baseModel === "seedance-2.5") {
+    return {
+      baseModel,
+      durationMax: 30,
+      imageLimit: 30,
+      videoLimit: 10,
+      summary: "4–30 秒 · 720p · 最多 30 图 / 10 视频"
+    };
+  }
+  return {
+    baseModel,
+    durationMax: 15,
+    imageLimit: 4,
+    videoLimit: 3,
+    summary: baseModel === "seedance-2.0-fast"
+      ? "快速版 · 4–15 秒 · 720p · 最多 4 图 / 3 视频"
+      : "质量版 · 4–15 秒 · 720p · 最多 4 图 / 3 视频"
+  };
+}
+
+function SeedanceVideoPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const locked = data.runState === "running";
+  const modelOptions = useConfiguredSeedanceVideoModels(data.modelId);
+  const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId)
+    ? data.modelId
+    : modelOptions[0] ?? "";
+  const spec = getSeedancePanelSpec(modelId);
+  const params = useMemo(() => ({
+    audio: "true",
+    duration: "4",
+    generationType: "text",
+    ratio: "16:9",
+    resolution: "720p",
+    ...(data.modelParams ?? {})
+  }), [data.modelParams]);
+  const typeOptions = ["文生视频", "参考素材生视频", "首尾帧生视频"];
+  const typeValue = params.generationType === "reference" ? "参考素材生视频" : params.generationType === "firstLast" ? "首尾帧生视频" : "文生视频";
+  const ratioOptions = asyncVideoRatioOptions;
+  const updateParams = (next: Record<string, string>) => {
+    if (locked) return;
+    updateNodeData(id, { modelId: modelId || undefined, modelParams: { ...params, ...next } });
+  };
+  const updateModel = (nextModelId: string) => {
+    if (locked) return;
+    const nextSpec = getSeedancePanelSpec(nextModelId);
+    const duration = Math.min(nextSpec.durationMax, Math.max(4, Number(params.duration) || 4));
+    updateNodeData(id, {
+      modelId: nextModelId,
+      modelParams: { ...params, duration: String(duration), resolution: "720p" }
+    });
+  };
+  useEffect(() => {
+    if (locked || data.modelId === modelId) return;
+    updateNodeData(id, { modelId: modelId || undefined });
+  }, [data.modelId, id, locked, modelId, updateNodeData]);
+  useEffect(() => {
+    const duration = Number(params.duration);
+    const ratio = ratioOptions.includes(params.ratio) ? params.ratio : "16:9";
+    if (locked || (Number.isInteger(duration) && duration >= 4 && duration <= spec.durationMax && ratio === params.ratio && params.resolution === "720p")) return;
+    updateNodeData(id, { modelParams: { ...params, duration: "4", ratio, resolution: "720p" } });
+  }, [id, locked, params, ratioOptions, spec.durationMax, updateNodeData]);
+  return (
+    <div className="nodrag nopan nowheel grid gap-3">
+      <GenerateSelect
+        disabled={locked || modelOptions.length === 0}
+        label="模型"
+        onChange={updateModel}
+        options={modelOptions.length ? modelOptions : ["未读取到 Seedance 模型"]}
+        renderValue={(value) => value}
+        value={modelId || "未读取到 Seedance 模型"}
+      />
+      <div className="rounded-[10px] border border-[#D9E1FF] bg-[#F5F7FF] px-3 py-2 text-[11px] font-semibold leading-4 text-[#506095]">
+        {spec.summary}
+      </div>
+      <GenerateSelect
+        disabled={locked}
+        label="类型"
+        onChange={(value) => updateParams({ generationType: value === "参考素材生视频" ? "reference" : value === "首尾帧生视频" ? "firstLast" : "text" })}
+        options={typeOptions}
+        value={typeValue}
+      />
+      <GenerateSelect disabled={locked} label="画面比例" onChange={(value) => updateParams({ ratio: value })} options={ratioOptions} value={ratioOptions.includes(params.ratio) ? params.ratio : "16:9"} />
+      <GenerateSelect disabled label="分辨率" onChange={() => undefined} options={["720p"]} value="720p" />
+      <GenerateSelect disabled={locked} label="视频时长" onChange={(value) => updateParams({ duration: value.replace(" 秒", "") })} options={Array.from({ length: spec.durationMax - 3 }, (_, index) => `${index + 4} 秒`)} value={`${Math.min(spec.durationMax, Math.max(4, Number(params.duration) || 4))} 秒`} />
+      <GenerateSelect disabled={locked} label="生成音频" onChange={(value) => updateParams({ audio: value === "开启" ? "true" : "false" })} options={["开启", "关闭"]} value={params.audio === "false" ? "关闭" : "开启"} />
+      <div className="rounded-[12px] border border-[#FFE1B8] bg-[#FFF8EE] px-4 py-2.5 text-[11px] font-semibold leading-5 text-[#9A5A12]">
+        {params.generationType === "firstLast"
+          ? "输入：Prompt + 首帧、尾帧两个指定图片端口；不能混用普通参考素材。"
+          : params.generationType === "reference"
+            ? `输入：Prompt + 最多 ${spec.imageLimit} 张图片 / ${spec.videoLimit} 条视频。`
+            : "输入：连接 1 个 Prompt 文本节点。输出：Video 视频节点。"}
+      </div>
+      {data.runState === "failed" && data.errorMessage ? (
+        <div className="rounded-[10px] border border-[#FFD5D5] bg-[#FFF5F5] px-3 py-2 text-[11px] font-semibold leading-4 text-danger" title={data.errorMessage}>
+          {data.errorMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Veo31VideoPanel({ id, data }: { id: string; data: CanvasNodeData }) {
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const locked = data.runState === "running";
+  const modelOptions = useConfiguredVeo31VideoModels(data.modelId);
+  const modelId = typeof data.modelId === "string" && modelOptions.includes(data.modelId)
+    ? data.modelId
+    : modelOptions[0] ?? "";
+  const params = useMemo(() => ({
+    generationType: "text",
+    ratio: "16:9",
+    resolution: "720p",
+    duration: "4",
+    ...(data.modelParams ?? {})
+  }), [data.modelParams]);
+  const typeOptions = ["文生视频", "参考图生视频", "首尾帧生视频"];
+  const typeValue = params.generationType === "reference" ? "参考图生视频" : params.generationType === "firstLast" ? "首尾帧生视频" : "文生视频";
+  const updateParams = (next: Record<string, string>) => {
+    if (locked) return;
+    updateNodeData(id, { modelId: modelId || undefined, modelParams: { ...params, ...next } });
+  };
+  useEffect(() => {
+    if (locked || data.modelId === modelId) return;
+    updateNodeData(id, { modelId: modelId || undefined });
+  }, [data.modelId, id, locked, modelId, updateNodeData]);
+  useEffect(() => {
+    const duration = Number(params.duration);
+    const ratio = ["16:9", "9:16"].includes(params.ratio) ? params.ratio : "16:9";
+    const resolution = ["720p", "1080p"].includes(params.resolution) ? params.resolution : "720p";
+    if (locked || ([4, 6, 8].includes(duration) && ratio === params.ratio && resolution === params.resolution)) return;
+    updateNodeData(id, { modelParams: { ...params, duration: "4", ratio, resolution } });
+  }, [id, locked, params, updateNodeData]);
+  return (
+    <div className="nodrag nopan nowheel grid gap-3">
+      <GenerateSelect
+        disabled={locked || modelOptions.length === 0}
+        label="模型"
+        onChange={(value) => updateNodeData(id, { modelId: value })}
+        options={modelOptions.length ? modelOptions : ["未读取到 Veo 3.1 模型"]}
+        renderValue={(value) => value}
+        value={modelId || "未读取到 Veo 3.1 模型"}
+      />
+      <GenerateSelect
+        disabled={locked}
+        label="类型"
+        onChange={(value) => updateParams({ generationType: value === "参考图生视频" ? "reference" : value === "首尾帧生视频" ? "firstLast" : "text" })}
+        options={typeOptions}
+        value={typeValue}
+      />
+      <GenerateSelect disabled={locked} label="画面比例" onChange={(value) => updateParams({ ratio: value })} options={["16:9", "9:16"]} value={params.ratio} />
+      <GenerateSelect disabled={locked} label="视频时长" onChange={(value) => updateParams({ duration: value.replace(" 秒", "") })} options={["4 秒", "6 秒", "8 秒"]} value={`${params.duration} 秒`} />
+      <GenerateSelect disabled={locked} label="分辨率" onChange={(value) => updateParams({ resolution: value })} options={["720p", "1080p"]} value={params.resolution} />
+      <div className="rounded-[12px] border border-[#FFE1B8] bg-[#FFF8EE] px-4 py-2.5 text-[11px] font-semibold leading-5 text-[#9A5A12]">
+        {params.generationType === "reference"
+          ? "输入：Prompt + 1–3 张参考图片；仅 Veo 3.1 标准版支持。"
+          : params.generationType === "firstLast"
+            ? "输入：Prompt + 首帧、尾帧两个指定图片端口。"
+            : "输入：连接 1 个 Prompt 文本节点。输出：Video 视频节点。"}
       </div>
       {data.runState === "failed" && data.errorMessage ? (
         <div className="rounded-[10px] border border-[#FFD5D5] bg-[#FFF5F5] px-3 py-2 text-[11px] font-semibold leading-4 text-danger" title={data.errorMessage}>
@@ -1762,6 +1994,7 @@ function GenerateImagePanel({ id, data, showGridOption = true, storyboardMode = 
   const params = { ...getDefaultGenerateImageParams(modelId), ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
   const gridEnabled = showGridOption && params.gridEnabled === "true";
+  const multiImageEnabled = !storyboardMode && params.multiImageEnabled === "true";
   const aspectRatioOptions = [
     "自动",
     "1:1 方图",
@@ -1798,7 +2031,10 @@ function GenerateImagePanel({ id, data, showGridOption = true, storyboardMode = 
       modelId: nextModelId,
       modelParams: {
         ...getDefaultGenerateImageParams(nextModelId),
-        ...(showGridOption ? { gridEnabled: params.gridEnabled ?? "false" } : {})
+        ...(showGridOption ? {
+          gridEnabled: params.gridEnabled ?? "false",
+          multiImageEnabled: params.multiImageEnabled ?? "false"
+        } : {})
       }
     });
   };
@@ -1850,31 +2086,34 @@ function GenerateImagePanel({ id, data, showGridOption = true, storyboardMode = 
         <div className="grid grid-cols-[132px_1fr] items-end gap-3">
           <GenerateSelect
             compact
-            disabled={locked || gridEnabled}
+            disabled={locked || gridEnabled || multiImageEnabled}
             label="生成张数"
             onChange={(value) => updateParam("imageCount", value)}
             options={["1", "2", "3", "4"]}
-            value={gridEnabled ? "1" : params.imageCount ?? "1"}
+            value={gridEnabled || multiImageEnabled ? "1" : params.imageCount ?? "1"}
           />
-          <label className="flex h-8 items-center justify-between rounded-[16px] border border-[#D9DDE6] bg-[#F6F7FA] px-4 text-[15px] font-semibold text-[#525866]">
-            <span>{storyboardMode ? "多图" : "宫图"}</span>
-            <span className="flex items-center gap-3">
-              {gridEnabled ? (
-                <span className={promptCount > 10 ? "text-danger" : "text-[#7C7F86]"}>
-                  {promptCount > 10 ? "10+" : storyboardMode ? `${promptCount || 0} 张` : `${promptCount || 0} 宫`}
-                </span>
-              ) : null}
-              <input
-                checked={gridEnabled}
-                className="h-4 w-4 accent-[#6C63FF]"
-                disabled={locked}
-                onChange={(event) => updateParam("gridEnabled", event.currentTarget.checked ? "true" : "false")}
-                onClick={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-                type="checkbox"
-              />
-            </span>
-          </label>
+          <ImageOutputModeToggle
+            compact
+            gridEnabled={gridEnabled}
+            locked={locked}
+            multiImageEnabled={multiImageEnabled}
+            onGridChange={(checked) => updateNodeData(id, {
+              modelParams: {
+                ...params,
+                gridEnabled: checked ? "true" : "false",
+                multiImageEnabled: "false"
+              }
+            })}
+            onMultiImageChange={(checked) => updateNodeData(id, {
+              modelParams: {
+                ...params,
+                gridEnabled: "false",
+                multiImageEnabled: checked ? "true" : "false"
+              }
+            })}
+            promptCount={promptCount}
+            storyboardMode={storyboardMode}
+          />
         </div>
       ) : (
         <GenerateSelect
@@ -1891,6 +2130,66 @@ function GenerateImagePanel({ id, data, showGridOption = true, storyboardMode = 
           分镜一致性：只代入 Prompt 指定的产品图片，严格锁定产品结构、比例、材质、颜色、Logo 与关键细节。
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ImageOutputModeToggle({
+  compact = false,
+  gridEnabled,
+  locked,
+  multiImageEnabled,
+  onGridChange,
+  onMultiImageChange,
+  promptCount,
+  storyboardMode = false
+}: {
+  compact?: boolean;
+  gridEnabled: boolean;
+  locked: boolean;
+  multiImageEnabled: boolean;
+  onGridChange: (checked: boolean) => void;
+  onMultiImageChange: (checked: boolean) => void;
+  promptCount: number;
+  storyboardMode?: boolean;
+}) {
+  const promptCountText = promptCount > 10 ? "10+" : String(promptCount || 0);
+  const checkboxProps = {
+    className: "h-4 w-4 shrink-0 accent-[#6C63FF]",
+    disabled: locked,
+    onClick: (event: MouseEvent<HTMLInputElement>) => event.stopPropagation(),
+    onPointerDown: (event: ReactPointerEvent<HTMLInputElement>) => event.stopPropagation(),
+    type: "checkbox" as const
+  };
+
+  if (storyboardMode) {
+    return (
+      <label className={`flex ${compact ? "h-8 rounded-[16px]" : "h-10 rounded-[18px]"} items-center justify-between border border-[#D9DDE6] bg-[#F6F7FA] px-4 text-[15px] font-semibold text-[#525866]`}>
+        <span>多图</span>
+        <span className="flex items-center gap-3">
+          {gridEnabled ? <span className={promptCount > 10 ? "text-danger" : "text-[#7C7F86]"}>{promptCountText} 张</span> : null}
+          <input {...checkboxProps} checked={gridEnabled} onChange={(event) => onGridChange(event.currentTarget.checked)} />
+        </span>
+      </label>
+    );
+  }
+
+  return (
+    <div className={`grid ${compact ? "h-8 rounded-[16px]" : "h-10 rounded-[18px]"} grid-cols-2 overflow-hidden border border-[#D9DDE6] bg-[#F6F7FA] text-[15px] font-semibold text-[#525866]`}>
+      <label className="flex min-w-0 items-center justify-between gap-2 border-r border-[#D9DDE6] px-3">
+        <span>宫图</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {gridEnabled ? <span className={promptCount > 10 ? "text-danger" : "truncate text-[#7C7F86]"}>{promptCountText} 宫</span> : null}
+          <input {...checkboxProps} checked={gridEnabled} onChange={(event) => onGridChange(event.currentTarget.checked)} />
+        </span>
+      </label>
+      <label className="flex min-w-0 items-center justify-between gap-2 px-3">
+        <span>多图</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {multiImageEnabled ? <span className={promptCount > 10 ? "text-danger" : "truncate text-[#7C7F86]"}>{promptCountText} 张</span> : null}
+          <input {...checkboxProps} checked={multiImageEnabled} onChange={(event) => onMultiImageChange(event.currentTarget.checked)} />
+        </span>
+      </label>
     </div>
   );
 }
@@ -2212,6 +2511,7 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
   const locked = data.runState === "running";
   const isMosquitoMode = data.kind === "mosquitoSceneImage";
   const gridEnabled = params.gridEnabled === "true";
+  const multiImageEnabled = params.multiImageEnabled === "true";
   const aspectRatioOptions = [
     "自动",
     "1:1 方图",
@@ -2241,7 +2541,8 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
       modelId: nextModelId,
       modelParams: {
         ...getDefaultSceneImageParams(nextModelId),
-        gridEnabled: params.gridEnabled ?? "false"
+        gridEnabled: params.gridEnabled ?? "false",
+        multiImageEnabled: params.multiImageEnabled ?? "false"
       }
     });
   };
@@ -2285,33 +2586,29 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
         options={spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"]}
         value={params.resolution ?? "1K"}
       />
-      <GenerateSelect
-        compact
-        disabled={locked || gridEnabled}
-        label="生成张数"
-        onChange={(value) => updateParam("imageCount", value)}
-        options={["1", "2", "3", "4"]}
-        value={gridEnabled ? "1" : params.imageCount ?? "1"}
-      />
-      <label className="flex h-10 items-center justify-between rounded-[18px] border border-[#D9DDE6] bg-[#F6F7FA] px-4 text-[15px] font-semibold text-[#525866]">
-        <span>宫图</span>
-        <span className="flex items-center gap-3">
-          {gridEnabled ? (
-            <span className={promptCount > 10 ? "text-danger" : "text-[#7C7F86]"}>
-              {promptCount > 10 ? "10+" : `${promptCount || 0} 宫`}
-            </span>
-          ) : null}
-          <input
-            checked={gridEnabled}
-            className="h-4 w-4 accent-[#6C63FF]"
-            disabled={locked}
-            onChange={(event) => updateParam("gridEnabled", event.currentTarget.checked ? "true" : "false")}
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            type="checkbox"
-          />
-        </span>
-      </label>
+      <div className="grid grid-cols-[132px_1fr] items-end gap-3">
+        <GenerateSelect
+          compact
+          disabled={locked || gridEnabled || multiImageEnabled}
+          label="生成张数"
+          onChange={(value) => updateParam("imageCount", value)}
+          options={["1", "2", "3", "4"]}
+          value={gridEnabled || multiImageEnabled ? "1" : params.imageCount ?? "1"}
+        />
+        <ImageOutputModeToggle
+          compact
+          gridEnabled={gridEnabled}
+          locked={locked}
+          multiImageEnabled={multiImageEnabled}
+          onGridChange={(checked) => updateNodeData(id, {
+            modelParams: { ...params, gridEnabled: checked ? "true" : "false", multiImageEnabled: "false" }
+          })}
+          onMultiImageChange={(checked) => updateNodeData(id, {
+            modelParams: { ...params, gridEnabled: "false", multiImageEnabled: checked ? "true" : "false" }
+          })}
+          promptCount={promptCount}
+        />
+      </div>
     </div>
   );
 }
@@ -2400,6 +2697,7 @@ function IndustrialDesignImagePanel({ id, data }: { id: string; data: CanvasNode
   const params = { ...getDefaultIndustrialDesignImageParams(modelId), ...(data.modelParams ?? {}) };
   const locked = data.runState === "running";
   const gridEnabled = params.gridEnabled === "true";
+  const multiImageEnabled = params.multiImageEnabled === "true";
   const aspectRatioOptions = [
     "自动",
     "1:1 方图",
@@ -2429,7 +2727,8 @@ function IndustrialDesignImagePanel({ id, data }: { id: string; data: CanvasNode
       modelId: nextModelId,
       modelParams: {
         ...getDefaultIndustrialDesignImageParams(nextModelId),
-        gridEnabled: params.gridEnabled ?? "false"
+        gridEnabled: params.gridEnabled ?? "false",
+        multiImageEnabled: params.multiImageEnabled ?? "false"
       }
     });
   };
@@ -2468,33 +2767,29 @@ function IndustrialDesignImagePanel({ id, data }: { id: string; data: CanvasNode
         options={spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"]}
         value={params.resolution ?? "1K"}
       />
-      <GenerateSelect
-        compact
-        disabled={locked || gridEnabled}
-        label="生成张数"
-        onChange={(value) => updateParam("imageCount", value)}
-        options={["1", "2", "3", "4"]}
-        value={gridEnabled ? "1" : params.imageCount ?? "1"}
-      />
-      <label className="flex h-10 items-center justify-between rounded-[18px] border border-[#D9DDE6] bg-[#F6F7FA] px-4 text-[15px] font-semibold text-[#525866]">
-        <span>宫图</span>
-        <span className="flex items-center gap-3">
-          {gridEnabled ? (
-            <span className={promptCount > 10 ? "text-danger" : "text-[#7C7F86]"}>
-              {promptCount > 10 ? "10+" : `${promptCount || 0} 宫`}
-            </span>
-          ) : null}
-          <input
-            checked={gridEnabled}
-            className="h-4 w-4 accent-[#6C63FF]"
-            disabled={locked}
-            onChange={(event) => updateParam("gridEnabled", event.currentTarget.checked ? "true" : "false")}
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-            type="checkbox"
-          />
-        </span>
-      </label>
+      <div className="grid grid-cols-[132px_1fr] items-end gap-3">
+        <GenerateSelect
+          compact
+          disabled={locked || gridEnabled || multiImageEnabled}
+          label="生成张数"
+          onChange={(value) => updateParam("imageCount", value)}
+          options={["1", "2", "3", "4"]}
+          value={gridEnabled || multiImageEnabled ? "1" : params.imageCount ?? "1"}
+        />
+        <ImageOutputModeToggle
+          compact
+          gridEnabled={gridEnabled}
+          locked={locked}
+          multiImageEnabled={multiImageEnabled}
+          onGridChange={(checked) => updateNodeData(id, {
+            modelParams: { ...params, gridEnabled: checked ? "true" : "false", multiImageEnabled: "false" }
+          })}
+          onMultiImageChange={(checked) => updateNodeData(id, {
+            modelParams: { ...params, gridEnabled: "false", multiImageEnabled: checked ? "true" : "false" }
+          })}
+          promptCount={promptCount}
+        />
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ export function ConnectionLine({ id, sourceX, sourceY, targetX, targetY, sourceP
   const nodes = useCanvasStore((state) => state.nodes);
   const { getEdges } = useReactFlow();
   const edge = getEdges().find((item) => item.id === id);
-  const locked = nodes.some((node) => (
+  const locked = nodes.some((node) => (node.id === edge?.source || node.id === edge?.target) && (node.data.kind === "veo31Video" || node.data.kind === "seedanceVideo") && node.data.runState === "running") || nodes.some((node) => (
     (node.id === edge?.source || node.id === edge?.target) &&
     (node.data.kind === "generateImage" || node.data.kind === "storyboardImage" || node.data.kind === "minimaxH3Prompt" || node.data.kind === "minimaxH3Video" || node.data.kind === "hdRedraw" || node.data.kind === "hdRedraw2" || node.data.kind === "rhinoTest" || node.data.kind === "textImageLayout" || node.data.kind === "gridImage" || node.data.kind === "sceneImage" || node.data.kind === "mosquitoSceneImage" || node.data.kind === "productRetouch" || node.data.kind === "industrialDesignImage" || node.data.kind === "productRemix" || node.data.kind === "imageChat" || node.data.kind === "sceneDirector" || node.data.kind === "videoDirector" || node.data.kind === "mosquitoSceneDirector" || node.data.kind === "taobaoPageDirector" || node.data.kind === "industrial_designer" || node.data.kind === "product_poster" || node.data.kind === "visual_director") &&
     node.data.runState === "running"

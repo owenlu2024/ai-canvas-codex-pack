@@ -96,8 +96,16 @@ select:focus-visible,
   transform: translateZ(0) scale(0.96);
 }
 
-.react-flow__pane {
-  cursor: default;
+.react-flow,
+.react-flow__renderer,
+.react-flow__pane,
+.react-flow__viewport,
+.react-flow__nodes,
+.react-flow__edges,
+.react-flow__edge,
+.react-flow__node,
+.react-flow__node * {
+  cursor: default !important;
 }
 
 .react-flow__viewport {
@@ -106,45 +114,52 @@ select:focus-visible,
 
 .react-flow__node {
   border-radius: 18px;
-  cursor: default;
   will-change: transform;
 }
 
 .react-flow__node.dragging,
 .react-flow__node.dragging.selected,
+.react-flow__node.dragging *,
 .react-flow__nodesselection,
 .react-flow__nodesselection-rect {
   cursor: grabbing !important;
 }
 
 .react-flow__node .ai-node-drag-handle {
-  cursor: grab;
+  cursor: default !important;
 }
 
 .react-flow__node.dragging .ai-node-drag-handle,
 .react-flow__node .ai-node-drag-handle:active {
-  cursor: grabbing;
-}
-
-.react-flow__node textarea,
-.react-flow__node input,
-.react-flow__node select,
-.react-flow__node [contenteditable="true"],
-.react-flow__node [contenteditable=""] {
-  cursor: text;
-}
-
-.react-flow__node input[type="range"] {
-  cursor: grab;
-}
-
-.react-flow__node input[type="range"]:active {
-  cursor: grabbing;
+  cursor: grabbing !important;
 }
 
 .canvas-middle-panning .react-flow__pane,
 .canvas-middle-panning .react-flow__viewport,
-.canvas-middle-panning .react-flow__node {
+.canvas-middle-panning .react-flow__node,
+.canvas-middle-panning .react-flow__node * {
+  cursor: grabbing !important;
+}
+
+/* 画布和挂载到 body 的浮层，平时统一使用 macOS 原生黑色箭头。 */
+html.ai-canvas-native-cursor-mode,
+html.ai-canvas-native-cursor-mode *,
+html.ai-canvas-native-cursor-mode *::before,
+html.ai-canvas-native-cursor-mode *::after,
+body.ai-canvas-native-cursor-mode,
+body.ai-canvas-native-cursor-mode *,
+body.ai-canvas-native-cursor-mode *::before,
+body.ai-canvas-native-cursor-mode *::after {
+  cursor: default !important;
+}
+
+/* 只有实际拖动节点或用中键拖动画布时，显示 macOS 原生握手光标。 */
+body.ai-canvas-native-cursor-mode .react-flow__node.dragging,
+body.ai-canvas-native-cursor-mode .react-flow__node.dragging *,
+body.ai-canvas-native-cursor-mode .canvas-middle-panning .react-flow__pane,
+body.ai-canvas-native-cursor-mode .canvas-middle-panning .react-flow__viewport,
+body.ai-canvas-native-cursor-mode .canvas-middle-panning .react-flow__node,
+body.ai-canvas-native-cursor-mode .canvas-middle-panning .react-flow__node * {
   cursor: grabbing !important;
 }
 
@@ -274,12 +289,12 @@ select:focus-visible,
 }
 
 .ai-canvas-port {
-  cursor: crosshair;
+  cursor: pointer !important;
   transform-origin: center center;
 }
 
 .ai-canvas-port:hover {
-  cursor: crosshair;
+  cursor: pointer !important;
   box-shadow: 0 0 0 5px rgba(108, 99, 255, 0.11), 0 4px 10px rgba(15, 23, 42, 0.18);
 }
 
