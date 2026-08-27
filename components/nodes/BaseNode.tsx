@@ -496,7 +496,7 @@ export function BaseNode({ id, data, selected }: NodeProps<Node<CanvasNodeData>>
       height={nodeHeight}
       motionState={data.motionState}
       nodeId={id}
-      portLayer={<NodePortLayer generationType={data.modelParams?.generationType} hiddenAutoImageInputCount={hiddenAutoImageInputCount} kind={data.kind} nodeId={id} />}
+      portLayer={<NodePortLayer generationType={data.modelParams?.generationType} hiddenAutoImageInputCount={hiddenAutoImageInputCount} kind={data.kind} nodeId={id} supportsReferenceVideo={isSeedanceVideoNode} />}
       resizable={isResizableMediaNode}
       running={isRunning}
       selected={selected}
