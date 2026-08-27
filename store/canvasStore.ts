@@ -243,6 +243,17 @@ function normalizeDirectImages(payload: unknown, expectedCount: number) {
   return Array.from(new Map(images.map((image) => [image.url, image])).values()).slice(0, expectedCount);
 }
 
+function normalizeDirectTaskOutputs(payload: unknown, expectedCount: number) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  const record = payload as Record<string, unknown>;
+  const data = record.data && typeof record.data === "object" && !Array.isArray(record.data)
+    ? record.data as Record<string, unknown>
+    : undefined;
+  const outputs = record.outputs ?? data?.outputs;
+  if (!Array.isArray(outputs)) return [];
+  return normalizeDirectImages({ outputs }, expectedCount);
+}
+
 async function readDirect12AiPayload(response: Response) {
   const text = await response.text();
   try {
@@ -292,8 +303,6 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
     });
     if (!response.ok) throw new Error(await readDirect12AiError(response));
     let taskPayload = await readDirect12AiPayload(response);
-    const submitImages = normalizeDirectImages(taskPayload, expectedCount);
-    if (submitImages.length) return submitImages;
     const taskId = getDirectTaskId(taskPayload);
     if (!taskId) throw new Error("12AI 没有返回任务 ID。");
 
@@ -311,10 +320,12 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
       if (!taskResponse.ok) throw new Error(await readDirect12AiError(taskResponse));
       taskPayload = await readDirect12AiPayload(taskResponse);
       const status = getDirectTaskStatus(taskPayload);
-      const taskImages = normalizeDirectImages(taskPayload, expectedCount);
-      if (taskImages.length && ["", "success", "succeeded", "completed", "done", "partial_completed"].includes(status)) return taskImages;
-      if (["success", "succeeded", "completed", "done"].includes(status) && !taskImages.length) throw new Error("12AI 任务已完成，但没有返回图片。");
-      if (["failed", "error", "cancelled", "canceled"].includes(status)) throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
+      const taskImages = normalizeDirectTaskOutputs(taskPayload, expectedCount);
+      if (["completed", "partial_completed"].includes(status)) {
+        if (taskImages.length) return taskImages;
+        throw new Error(getDirectTaskError(taskPayload) || "12AI 任务已结束，但 outputs 没有返回图片。");
+      }
+      if (status === "failed") throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
     }
     throw new Error("12AI 生成超过 30 分钟仍未返回图片。");
   }
@@ -338,8 +349,6 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
     });
     if (!submitResponse.ok) throw new Error(await readDirect12AiError(submitResponse));
     let taskPayload = await readDirect12AiPayload(submitResponse);
-    const submitImages = normalizeDirectImages(taskPayload, 1);
-    if (submitImages.length) return submitImages[0];
     const taskId = getDirectTaskId(taskPayload);
     if (!taskId) throw new Error("12AI 没有返回任务 ID。");
 
@@ -357,10 +366,12 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
       if (!taskResponse.ok) throw new Error(await readDirect12AiError(taskResponse));
       taskPayload = await readDirect12AiPayload(taskResponse);
       const status = getDirectTaskStatus(taskPayload);
-      const taskImages = normalizeDirectImages(taskPayload, 1);
-      if (taskImages.length && ["", "success", "succeeded", "completed", "done", "partial_completed"].includes(status)) return taskImages[0];
-      if (["success", "succeeded", "completed", "done"].includes(status) && !taskImages.length) throw new Error("12AI 任务已完成，但没有返回图片。");
-      if (["failed", "error", "cancelled", "canceled"].includes(status)) throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
+      const taskImages = normalizeDirectTaskOutputs(taskPayload, 1);
+      if (["completed", "partial_completed"].includes(status)) {
+        if (taskImages.length) return taskImages[0];
+        throw new Error(getDirectTaskError(taskPayload) || "12AI 任务已结束，但 outputs 没有返回图片。");
+      }
+      if (status === "failed") throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
     }
     throw new Error("12AI 生成超过 30 分钟仍未返回图片。");
   };
@@ -382,6 +393,52 @@ async function prepareProxyGeneratedImagesBody(body: Record<string, unknown>) {
   };
 }
 
+async function cacheDirectGeneratedImages(images: Array<{ url: string }>, sourceNodeId: unknown, controller: AbortController) {
+  if (!images.length) return images;
+  const response = await fetch("/api/canvas/cache-generated-images", {
+    body: JSON.stringify({
+      images,
+      sourceNodeId: typeof sourceNodeId === "string" ? sourceNodeId : undefined
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    signal: controller.signal
+  });
+  const payload = await response.json() as { error?: string; images?: Array<{ url?: string }> };
+  if (!response.ok) throw new Error(payload.error || "生成图片尚未准备完成。");
+  const cached = (payload.images ?? []).map((image) => ({ url: image.url ?? "" })).filter((image) => Boolean(image.url));
+  if (cached.length !== images.length) throw new Error("生成图片没有完整保存，请重新运行。");
+  return cached;
+}
+
+async function verifyGeneratedImagesReady(images: Array<{ url: string }>, controller: AbortController) {
+  await Promise.all(images.map(({ url }) => new Promise<void>((resolve, reject) => {
+    if (!url) {
+      reject(new Error("AI 服务没有返回图片地址。"));
+      return;
+    }
+    const image = new window.Image();
+    const timeout = window.setTimeout(() => finish(new Error("图片加载超时，请重新运行。")), 30000);
+    const abort = () => finish(new DOMException("生成已取消。", "AbortError"));
+    const finish = (error?: Error) => {
+      window.clearTimeout(timeout);
+      controller.signal.removeEventListener("abort", abort);
+      image.onload = null;
+      image.onerror = null;
+      if (error) reject(error);
+      else resolve();
+    };
+    image.onload = () => {
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) finish();
+      else finish(new Error("返回的图片文件不完整，请重新运行。"));
+    };
+    image.onerror = () => finish(new Error("返回的图片无法显示，请重新运行。"));
+    controller.signal.addEventListener("abort", abort, { once: true });
+    image.src = url;
+  })));
+  return images;
+}
+
 async function requestGeneratedImagesOnce(body: Record<string, unknown>, controller: AbortController) {
   const aiSettings = body.aiSettings as ReturnType<typeof getClientAiSettingsPayload>;
   const rawModel = typeof body.model === "string" ? body.model : "";
@@ -392,7 +449,7 @@ async function requestGeneratedImagesOnce(body: Record<string, unknown>, control
   };
   try {
     const directImages = await requestDirect12AiGeneratedImages(requestBody, controller);
-    if (directImages) return directImages;
+    if (directImages) return cacheDirectGeneratedImages(directImages, body.sourceNodeId, controller);
   } catch (error) {
     if (!(error instanceof TypeError)) throw error;
   }
@@ -455,7 +512,10 @@ async function requestGeneratedImagesOnce(body: Record<string, unknown>, control
 async function requestGeneratedImages(body: Record<string, unknown>, controller: AbortController) {
   const params = body.params && typeof body.params === "object" ? body.params as Record<string, string> : {};
   const requestedCount = getRequestedImageCount(params);
-  if (requestedCount === 1) return requestGeneratedImagesOnce(body, controller);
+  if (requestedCount === 1) {
+    const result = await requestGeneratedImagesOnce(body, controller);
+    return verifyGeneratedImagesReady(result, controller);
+  }
 
   const images: Array<{ url: string }> = [];
   for (let index = 0; index < requestedCount; index += 1) {
@@ -470,7 +530,7 @@ async function requestGeneratedImages(body: Record<string, unknown>, controller:
     if (!image?.url) throw new Error(`第 ${index + 1} 张图片没有返回结果。`);
     images.push(image);
   }
-  return images;
+  return verifyGeneratedImagesReady(images, controller);
 }
 
 function getNextImageNumber(nodes: Node<CanvasNodeData>[], reserved = new Set<number>()) {

@@ -719,17 +719,74 @@ function normalizeImages(payload: unknown, expectedCount?: number) {
   return expectedCount ? uniqueImages.slice(0, expectedCount) : uniqueImages;
 }
 
+function normalizeTaskOutputs(payload: unknown, expectedCount?: number) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  const record = payload as Record<string, unknown>;
+  const data = getNestedRecord(record, "data");
+  const outputs = record.outputs ?? data?.outputs;
+  if (!Array.isArray(outputs)) return [];
+  const images: Array<{ url: string }> = [];
+  collectImages(outputs, images, "outputs");
+  const uniqueImages = Array.from(new Map(images.map((image) => [image.url, image])).values());
+  return expectedCount ? uniqueImages.slice(0, expectedCount) : uniqueImages;
+}
+
 function getResponseKeys(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
   return Object.keys(payload as Record<string, unknown>).slice(0, 20);
 }
 
 function isSuccessStatus(status: string) {
-  return ["", "success", "succeeded", "completed", "done", "partial_completed"].includes(status);
+  return ["completed", "partial_completed"].includes(status);
 }
 
 function isTerminalSuccessStatus(status: string) {
-  return ["success", "succeeded", "completed", "done"].includes(status);
+  return ["completed", "partial_completed"].includes(status);
+}
+
+function generatedImageExtension(contentType: string) {
+  const normalized = contentType.toLowerCase().split(";")[0].trim();
+  if (normalized === "image/jpeg") return "jpg";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/gif") return "gif";
+  if (normalized === "image/avif") return "avif";
+  return normalized === "image/png" ? "png" : "";
+}
+
+async function persistGeneratedImages(images: Array<{ url: string }>, taskIds: string[]) {
+  const directory = getCanvasDataPath("generated-images");
+  let saved = 0;
+  const persisted = await Promise.all(images.map(async (image, index) => {
+    if (!image.url || image.url.startsWith("/") || (!image.url.startsWith("data:image/") && !/^https?:\/\//i.test(image.url))) return image;
+    try {
+      let buffer: Buffer;
+      let contentType = "";
+      if (image.url.startsWith("data:image/")) {
+        const match = image.url.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);
+        if (!match) return image;
+        contentType = match[1];
+        buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
+      } else {
+        const response = await fetch(assertSafeRemoteFetchUrl(image.url), { cache: "no-store", signal: AbortSignal.timeout(60000) });
+        if (!response.ok) throw new Error(`图片备份下载失败：${response.status}`);
+        contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
+        if (!contentType.toLowerCase().startsWith("image/")) throw new Error("图片备份地址没有返回图片内容。");
+        buffer = Buffer.from(await response.arrayBuffer());
+      }
+      const extension = generatedImageExtension(contentType);
+      if (!extension || !buffer.length || buffer.length > 80 * 1024 * 1024) throw new Error("图片备份格式或大小不受支持。");
+      const taskTag = (taskIds[index] ?? taskIds[0] ?? `generated-${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 96);
+      const filename = `${taskTag || `generated-${Date.now()}`}-${index + 1}.${extension}`;
+      await fs.mkdir(directory, { recursive: true });
+      await fs.writeFile(path.join(directory, filename), buffer);
+      saved += 1;
+      return { url: `/api/canvas/generated-image/${encodeURIComponent(filename)}` };
+    } catch (error) {
+      console.warn("[generate-image] local image backup skipped", error);
+      return image;
+    }
+  }));
+  return { images: persisted, saved };
 }
 
 async function writeDebug(record: SafeDebugRecord) {
@@ -927,7 +984,7 @@ async function pollAsyncTask(settings: ApiSettings, task: { expectedCount: numbe
 
   const taskResult = await readProviderPayload(taskResponse);
   const status = getTaskStatus(taskResult.payload);
-  const images = normalizeImages(taskResult.payload, task.expectedCount);
+  const images = normalizeTaskOutputs(taskResult.payload, task.expectedCount);
   const debug = {
     mode: "task-poll",
     status,
@@ -973,7 +1030,7 @@ async function executeAsyncGeneration(settings: ApiSettings, context: SubmitCont
   let taskContentType: string | null = submitted.contentType;
   while (Date.now() - startedAt < generationTimeoutMs) {
     const status = getTaskStatus(taskPayload);
-    const images = normalizeImages(taskPayload, expectedCount);
+    const images = normalizeTaskOutputs(taskPayload, expectedCount);
     if (images.length && isSuccessStatus(status)) {
       await updateRecoveryTask(taskId, { completedAt: new Date().toISOString(), images, status: "completed" });
       return {
@@ -1014,20 +1071,8 @@ async function executeAsyncGeneration(settings: ApiSettings, context: SubmitCont
     await updateRecoveryTask(taskId, { status: "running" });
   }
 
-  const images = normalizeImages(taskPayload, expectedCount);
-  if (!images.length) {
-    await updateRecoveryTask(taskId, { error: "AI 服务没有返回图片。", status: "running" });
-    throw new AiProviderError("AI 服务没有返回图片。", 502, { ...taskDebug, status: getTaskStatus(taskPayload) }, { responseContentType: taskContentType, responseKeys: getResponseKeys(taskPayload) });
-  }
-  await updateRecoveryTask(taskId, { completedAt: new Date().toISOString(), images, status: "completed" });
-  return {
-    debug: { ...taskDebug, status: getTaskStatus(taskPayload) },
-    imageCount: images.length,
-    images,
-    responseContentType: taskContentType,
-    responseKeys: getResponseKeys(taskPayload),
-    responseStatus: 200
-  };
+  await updateRecoveryTask(taskId, { error: "AI 任务等待超时。", status: "running" });
+  throw new AiProviderError("AI 生成超过 30 分钟仍未完成，请稍后重试或检查任务状态。", 504, { ...taskDebug, status: getTaskStatus(taskPayload) }, { responseContentType: taskContentType, responseKeys: getResponseKeys(taskPayload) });
 }
 
 async function executeGeminiBatchGeneration(settings: ApiSettings, context: SubmitContext): Promise<AsyncGenerationResult> {
@@ -1161,10 +1206,11 @@ export async function POST(request: NextRequest) {
           status: "running"
         }, { status: 202 });
       }
-      await Promise.all(taskIds.map((taskId) => updateRecoveryTask(taskId, { status: "backed_up" })));
+      const backup = await persistGeneratedImages(images, taskIds);
+      await Promise.all(taskIds.map((taskId) => updateRecoveryTask(taskId, { images: backup.images, status: "backed_up" })));
       await writeDebug({
         at: new Date().toISOString(),
-        backupSaved: 0,
+        backupSaved: backup.saved,
         debug: {
           mode: "task-poll",
           taskIds
@@ -1174,7 +1220,7 @@ export async function POST(request: NextRequest) {
         responseKeys: results[0]?.responseKeys,
         responseStatus: 200
       });
-      return NextResponse.json({ debug: { backupSaved: 0, mode: "task-poll", taskIds }, images, status: "completed" });
+      return NextResponse.json({ debug: { backupSaved: backup.saved, mode: "task-poll", taskIds }, images: backup.images, status: "completed" });
     }
 
     const result = isAgnesImageModel(model)
@@ -1186,17 +1232,18 @@ export async function POST(request: NextRequest) {
       : await executeAsyncGeneration(settings, context, n);
     const taskIds = [result.debug.taskId, ...(Array.isArray(result.debug.taskIds) ? result.debug.taskIds : [])]
       .filter((taskId): taskId is string => typeof taskId === "string");
-    await Promise.all(taskIds.map((taskId) => updateRecoveryTask(taskId, { status: "backed_up" })));
+    const backup = await persistGeneratedImages(result.images, taskIds);
+    await Promise.all(taskIds.map((taskId) => updateRecoveryTask(taskId, { images: backup.images, status: "backed_up" })));
     await writeDebug({
       at: new Date().toISOString(),
-      backupSaved: 0,
+      backupSaved: backup.saved,
       debug: result.debug,
       imageCount: result.imageCount,
       responseContentType: result.responseContentType,
       responseKeys: result.responseKeys,
       responseStatus: result.responseStatus
     });
-    return NextResponse.json({ debug: { ...result.debug, backupSaved: 0 }, images: result.images });
+    return NextResponse.json({ debug: { ...result.debug, backupSaved: backup.saved }, images: backup.images });
   } catch (error) {
     if (error instanceof AiProviderError) {
       await writeDebug({

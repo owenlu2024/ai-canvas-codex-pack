@@ -4,20 +4,39 @@ import { useEffect } from "react";
 import { useUpdateNodeInternals } from "@xyflow/react";
 import { PortDot } from "@/components/nodes/PortDot";
 import { portsByNode, type NodeKind } from "@/lib/nodeTypes";
+import { useCanvasStore } from "@/store/canvasStore";
 
-export function NodePortLayer({ generationType, hiddenAutoImageInputCount, kind, nodeId }: { generationType?: string; hiddenAutoImageInputCount: number; kind: NodeKind; nodeId: string }) {
+export function NodePortLayer({ generationType, hiddenAutoImageInputCount, kind, nodeId, supportsReferenceVideo = false }: { generationType?: string; hiddenAutoImageInputCount: number; kind: NodeKind; nodeId: string; supportsReferenceVideo?: boolean }) {
   const updateNodeInternals = useUpdateNodeInternals();
+  const edges = useCanvasStore((state) => state.edges);
+  const setEdges = useCanvasStore((state) => state.setEdges);
   const ports = portsByNode[kind];
   const isVideoGenerator = kind === "minimaxH3Video" || kind === "seedanceVideo" || kind === "veo31Video";
   const isFirstLastMode = isVideoGenerator && generationType === "firstLast";
-  const inputs = ports.filter((port) => (
-    port.direction === "input" && (port.id !== "image-end-in" || isFirstLastMode)
-  ));
+  const isReferenceMode = isVideoGenerator && (generationType === "reference" || generationType === "multimodal");
+  const inputOrder = isVideoGenerator
+    ? isFirstLastMode
+      ? ["image-in", "image-end-in", "text-in"]
+      : isReferenceMode
+        ? supportsReferenceVideo ? ["image-in", "video-in", "text-in"] : ["image-in", "text-in"]
+        : ["text-in"]
+    : ports.filter((port) => port.direction === "input").map((port) => port.id);
+  const inputs = inputOrder
+    .map((portId) => ports.find((port) => port.direction === "input" && port.id === portId))
+    .filter((port): port is (typeof ports)[number] => Boolean(port));
   const outputs = ports.filter((port) => port.direction === "output");
+  const activeInputIds = inputs.map((port) => port.id).join("|");
 
   useEffect(() => {
     updateNodeInternals(nodeId);
-  }, [isFirstLastMode, nodeId, updateNodeInternals]);
+  }, [activeInputIds, nodeId, updateNodeInternals]);
+
+  useEffect(() => {
+    if (!isVideoGenerator) return;
+    const allowedInputIds = new Set(activeInputIds.split("|").filter(Boolean));
+    const nextEdges = edges.filter((edge) => edge.target !== nodeId || !edge.targetHandle || allowedInputIds.has(edge.targetHandle));
+    if (nextEdges.length !== edges.length) setEdges(nextEdges);
+  }, [activeInputIds, edges, isVideoGenerator, nodeId, setEdges]);
 
   return (
     <>
