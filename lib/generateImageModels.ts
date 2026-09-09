@@ -1,6 +1,6 @@
 import { getBaseModelId } from "@/lib/clientAiSettings";
 
-export type GenerateImageModelId = "gpt-image-2" | "gemini-3.1-flash-image" | "gemini-3.1-flash-image-preview" | "gemini-3.1-flash-lite-image" | "gemini-3-pro-image" | "gemini-3-pro-image-preview" | "agnes-image-2.1-flash";
+export type GenerateImageModelId = "gpt-image-2" | "gpt-image-2.5-flare" | "gpt-image-2.5-sunburst" | "gemini-3.1-flash-image" | "gemini-3.1-flash-image-preview" | "gemini-3.1-flash-lite-image" | "gemini-3-pro-image" | "gemini-3-pro-image-preview" | "agnes-image-2.1-flash";
 
 export type GenerateImageParamKey = "aspectRatio" | "resolution" | "quality" | "imageCount" | "size";
 
@@ -65,6 +65,33 @@ const imageCountParam: GenerateImageParamSpec = {
   compact: true
 };
 
+const gptQualityParam: GenerateImageParamSpec = {
+  key: "quality",
+  label: "Quality",
+  options: ["Auto", "Low", "Medium", "High"]
+};
+
+const gpt25QualityParam: GenerateImageParamSpec = {
+  key: "quality",
+  label: "Quality",
+  options: ["Auto", "Low", "Medium", "High", "XHigh", "Max"]
+};
+
+const gptImageModelIds: GenerateImageModelId[] = ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"];
+
+function makeGptImageModelSpec(id: GenerateImageModelId, includeImageCount = true): GenerateImageModelSpec {
+  return {
+    id,
+    label: id,
+    params: [
+      aspectRatioParam,
+      gptResolutionParam,
+      id === "gpt-image-2" ? gptQualityParam : gpt25QualityParam,
+      ...(includeImageCount ? [imageCountParam] : [])
+    ]
+  };
+}
+
 const agnesSizeParam: GenerateImageParamSpec = {
   key: "size",
   label: "Size",
@@ -103,16 +130,7 @@ const gemini3ProImageModelSpec: GenerateImageModelSpec = {
 };
 
 export const generateImageModelSpecs: GenerateImageModelSpec[] = [
-  {
-    id: "gpt-image-2",
-    label: "gpt-image-2",
-    params: [
-      aspectRatioParam,
-      gptResolutionParam,
-      { key: "quality", label: "Quality", options: ["Auto", "Low", "Medium", "High"] },
-      imageCountParam
-    ]
-  },
+  ...gptImageModelIds.map((id) => makeGptImageModelSpec(id)),
   {
     id: "gemini-3.1-flash-image-preview",
     label: "gemini-3.1-flash-image-preview",
@@ -140,15 +158,7 @@ export const generateImageModelSpecs: GenerateImageModelSpec[] = [
 export const defaultGenerateImageModelId = generateImageModelSpecs[0].id;
 
 export const gridImageModelSpecs: GenerateImageModelSpec[] = [
-  {
-    id: "gpt-image-2",
-    label: "gpt-image-2",
-    params: [
-      aspectRatioParam,
-      gptResolutionParam,
-      { key: "quality", label: "Quality", options: ["Auto", "Low", "Medium", "High"] }
-    ]
-  },
+  ...gptImageModelIds.map((id) => makeGptImageModelSpec(id, false)),
   {
     id: "gemini-3.1-flash-image-preview",
     label: "gemini-3.1-flash-image-preview",
@@ -174,15 +184,7 @@ export const gridImageModelSpecs: GenerateImageModelSpec[] = [
 export const defaultGridImageModelId = gridImageModelSpecs[0].id;
 
 export const sceneImageModelSpecs: GenerateImageModelSpec[] = [
-  {
-    id: "gpt-image-2",
-    label: "gpt-image-2",
-    params: [
-      aspectRatioParam,
-      gptResolutionParam,
-      imageCountParam
-    ]
-  },
+  ...gptImageModelIds.map((id) => makeGptImageModelSpec(id)),
   {
     id: "gemini-3.1-flash-image-preview",
     label: "gemini-3.1-flash-image-preview",
@@ -219,7 +221,7 @@ export const defaultProductRemixModelId = productRemixModelSpecs[0].id;
 
 export function getReferenceImageLimit(modelId?: string) {
   modelId = getBaseModelId(modelId);
-  if (modelId === "gpt-image-2") return 5;
+  if (modelId === "gpt-image-2" || modelId === "gpt-image-2.5-flare" || modelId === "gpt-image-2.5-sunburst") return 5;
   if (modelId === "gemini-3.1-flash-image-preview") return 14;
   if (modelId === "gemini-3.1-flash-image") return 14;
   if (modelId === "gemini-3.1-flash-lite-image") return 14;
@@ -273,11 +275,11 @@ export function getSceneImageModelSpec(modelId?: string) {
 
 export function getDefaultSceneImageParams(modelId?: string): Record<string, string> {
   const spec = getSceneImageModelSpec(modelId);
+  const defaults = Object.fromEntries(spec.params.map((param) => [param.key, param.options[0]]));
   return {
-    ...Object.fromEntries(spec.params.map((param) => [param.key, param.options[0]])),
+    ...defaults,
     aspectRatio: "自动",
-    gridEnabled: "false",
-    quality: "Auto"
+    gridEnabled: "false"
   };
 }
 
