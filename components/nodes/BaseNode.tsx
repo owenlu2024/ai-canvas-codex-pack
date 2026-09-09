@@ -2012,13 +2012,18 @@ function GenerateImagePanel({ id, data, showGridOption = true, storyboardMode = 
     "8:1 极宽",
     "1:8 极高"
   ];
-  const qualityOptions = [
+  const allQualityOptions = [
     { label: "自动", value: "Auto" },
     { label: "低", value: "Low" },
     { label: "中", value: "Medium" },
-    { label: "高", value: "High" }
+    { label: "高", value: "High" },
+    { label: "超高", value: "XHigh" },
+    { label: "最高", value: "Max" }
   ];
-  const currentQuality = qualityOptions.find((option) => option.value === params.quality)?.label ?? "自动";
+  const supportedQualityValues = spec.params.find((param) => param.key === "quality")?.options ?? [];
+  const qualityOptions = allQualityOptions.filter((option) => supportedQualityValues.includes(option.value));
+  const normalizedQuality = supportedQualityValues.includes(params.quality) ? params.quality : supportedQualityValues[0];
+  const currentQuality = qualityOptions.find((option) => option.value === normalizedQuality)?.label ?? "自动";
 
   useEffect(() => {
     if (data.modelId && data.modelId === modelId && data.modelParams) return;
@@ -2077,7 +2082,7 @@ function GenerateImagePanel({ id, data, showGridOption = true, storyboardMode = 
         <GenerateSelect
           disabled={locked}
           label="质量"
-          onChange={(label) => updateParam("quality", qualityOptions.find((option) => option.label === label)?.value ?? "Auto")}
+          onChange={(label) => updateParam("quality", qualityOptions.find((option) => option.label === label)?.value ?? normalizedQuality ?? "Auto")}
           options={qualityOptions.map((option) => option.label)}
           value={currentQuality}
         />
@@ -2230,13 +2235,18 @@ function HdRedrawPanel({ id, data, step }: { id: string; data: CanvasNodeData; s
     "8:1 极宽",
     "1:8 极高"
   ];
-  const qualityOptions = [
+  const allQualityOptions = [
     { label: "自动", value: "Auto" },
     { label: "低", value: "Low" },
     { label: "中", value: "Medium" },
-    { label: "高", value: "High" }
+    { label: "高", value: "High" },
+    { label: "超高", value: "XHigh" },
+    { label: "最高", value: "Max" }
   ];
-  const currentQuality = qualityOptions.find((option) => option.value === params.quality)?.label ?? "自动";
+  const supportedQualityValues = spec.params.find((param) => param.key === "quality")?.options ?? [];
+  const qualityOptions = allQualityOptions.filter((option) => supportedQualityValues.includes(option.value));
+  const normalizedQuality = supportedQualityValues.includes(params.quality) ? params.quality : supportedQualityValues[0];
+  const currentQuality = qualityOptions.find((option) => option.value === normalizedQuality)?.label ?? "自动";
 
   useEffect(() => {
     const nextParams = { ...params, gridEnabled: "false", imageCount: "1" };
@@ -2306,7 +2316,7 @@ function HdRedrawPanel({ id, data, step }: { id: string; data: CanvasNodeData; s
             compact
             disabled={locked}
             label="质量"
-            onChange={(label) => updateParam("quality", qualityOptions.find((option) => option.label === label)?.value ?? "Auto")}
+            onChange={(label) => updateParam("quality", qualityOptions.find((option) => option.label === label)?.value ?? normalizedQuality ?? "Auto")}
             options={qualityOptions.map((option) => option.label)}
             value={currentQuality}
           />
@@ -2374,6 +2384,7 @@ function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }
     updateNodeData(id, {
       modelId: nextModelId,
       modelParams: {
+        ...getDefaultGenerateImageParams(nextModelId),
         aspectRatio: params.aspectRatio ?? "Auto",
         imageCount: params.imageCount ?? "1",
         resolution: getGenerateImageModelSpec(nextModelId).params.find((param) => param.key === "resolution")?.options.length === 1 ? "1K" : "Auto"
@@ -2415,6 +2426,7 @@ function TextImageLayoutPanel({ id, data }: { id: string; data: CanvasNodeData }
         options={resolutionOptions}
         value={resolution}
       />
+      <ImageQualitySelect disabled={locked} onChange={(value) => updateParam("quality", value)} params={params} spec={spec} />
       <GenerateSelect
         compact
         disabled={locked}
@@ -2440,7 +2452,7 @@ function GridImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
   const modelId = hasKnownModel ? data.modelId as string : modelOptions[0] ?? defaultGridImageModelId;
   const spec = getGridImageModelSpec(modelId);
   const params = { ...getDefaultGridImageParams(modelId), ...(data.modelParams ?? {}) };
-  const visibleParams = spec.params;
+  const visibleParams = spec.params.filter((param) => param.key !== "quality");
   const locked = data.runState === "running";
 
   useEffect(() => {
@@ -2487,6 +2499,7 @@ function GridImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
           value={params[param.key] ?? param.options[0]}
         />
       ))}
+      <ImageQualitySelect disabled={locked} onChange={(value) => updateParam("quality", value)} params={params} spec={spec} />
       <div className="mt-1 flex h-8 items-center justify-between rounded-[16px] border border-[#D9DDE6] bg-[#F6F7FA] px-4 text-[14px] font-semibold text-[#525866]">
         <span>Grid</span>
         <span className={promptCount > 10 ? "text-danger" : "text-[#7C7F86]"}>{promptCount > 10 ? "10+" : promptCount || 0}</span>
@@ -2586,6 +2599,7 @@ function SceneImagePanel({ id, data }: { id: string; data: CanvasNodeData }) {
         options={spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"]}
         value={params.resolution ?? "1K"}
       />
+      <ImageQualitySelect disabled={locked} onChange={(value) => updateParam("quality", value)} params={params} spec={spec} />
       <div className="grid grid-cols-[132px_1fr] items-end gap-3">
         <GenerateSelect
           compact
@@ -2667,6 +2681,7 @@ function ProductRetouchPanel({ id, data }: { id: string; data: CanvasNodeData })
       <div className="grid grid-cols-2 gap-x-3 gap-y-2">
         <GenerateSelect dense disabled={locked} label="画幅比例" onChange={(value) => updateParam("aspectRatio", value)} options={aspectRatioOptions} value={params.aspectRatio === "Auto" ? "自动" : params.aspectRatio ?? "自动"} />
         <GenerateSelect dense disabled={locked} label="分辨率" menuAlign="right" onChange={(value) => updateParam("resolution", value)} options={spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"]} value={params.resolution ?? "1K"} />
+        <ImageQualitySelect dense disabled={locked} onChange={(value) => updateParam("quality", value)} params={params} spec={spec} />
         <GenerateSelect dense disabled={locked} label="生成张数" onChange={(value) => updateParam("imageCount", value)} options={["1", "2", "3", "4"]} value={params.imageCount ?? "1"} />
         <GenerateSelect dense disabled={locked} label="背景处理" menuAlign="right" onChange={(value) => updateParam("backgroundMode", value)} options={["按 Prompt / 参考图", "纯白", "浅灰", "无缝摄影棚"]} value={params.backgroundMode} />
         <GenerateSelect dense disabled={locked} label="摄影棚灯光" onChange={(value) => updateParam("studioLighting", value)} options={["自动专业布光", "高调柔光", "正面柔光", "左侧主光", "右侧主光", "顶部柔光", "三点布光", "轮廓光", "柔光箱棚拍"]} value={params.studioLighting} />
@@ -2767,6 +2782,7 @@ function IndustrialDesignImagePanel({ id, data }: { id: string; data: CanvasNode
         options={spec.params.find((param) => param.key === "resolution")?.options ?? ["1K"]}
         value={params.resolution ?? "1K"}
       />
+      <ImageQualitySelect disabled={locked} onChange={(value) => updateParam("quality", value)} params={params} spec={spec} />
       <div className="grid grid-cols-[132px_1fr] items-end gap-3">
         <GenerateSelect
           compact
@@ -2949,6 +2965,7 @@ function ProductRemixPanel({ id, data }: { id: string; data: CanvasNodeData }) {
           value={params.aspectRatio === "Auto" ? "自动" : params.aspectRatio ?? "自动"}
         />
       ) : null}
+      <ImageQualitySelect disabled={locked} onChange={(value) => updateParam("quality", value)} params={params} spec={spec} />
       {isSingle ? (
         <RemixSlider disabled={locked} label="Remix 强度" onChange={(value) => updateParam("remix", value)} value={remix} />
       ) : (
@@ -3157,6 +3174,37 @@ function GenerateSelect({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ImageQualitySelect({
+  dense = false,
+  disabled,
+  onChange,
+  params,
+  spec
+}: {
+  dense?: boolean;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  params: Record<string, string>;
+  spec: { params: Array<{ key: string; options: string[] }> };
+}) {
+  const qualityParam = spec.params.find((param) => param.key === "quality");
+  if (!qualityParam) return null;
+  const labels: Record<string, string> = { Auto: "自动", Low: "低", Medium: "中", High: "高", XHigh: "超高", Max: "最高" };
+  const valuesByLabel = Object.fromEntries(qualityParam.options.map((value) => [labels[value] ?? value, value]));
+  const options = Object.keys(valuesByLabel);
+  const normalizedValue = qualityParam.options.includes(params.quality) ? params.quality : qualityParam.options[0];
+  return (
+    <GenerateSelect
+      dense={dense}
+      disabled={disabled}
+      label="质量"
+      onChange={(label) => onChange(valuesByLabel[label] ?? normalizedValue)}
+      options={options}
+      value={labels[normalizedValue] ?? normalizedValue}
+    />
   );
 }
 

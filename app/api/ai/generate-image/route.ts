@@ -80,10 +80,22 @@ function getImageCount(value?: string) {
   return Number.isFinite(count) ? Math.min(6, Math.max(1, Math.round(count))) : 1;
 }
 
-function getQuality(value?: string) {
+function getQuality(value?: string, model?: string) {
   const normalized = (value ?? "Auto").toLowerCase();
+  if (model === "gpt-image-2.5-flare" || model === "gpt-image-2.5-sunburst") {
+    return ["low", "medium", "high", "xhigh", "max", "auto"].includes(normalized) ? normalized : "auto";
+  }
   if (["low", "medium", "high"].includes(normalized)) return normalized;
   return "auto";
+}
+
+function fitGptImagePrompt(value: string) {
+  const limit = 31800;
+  if (value.length <= limit) return value;
+  const marker = "\n\n[Repeated middle prompt content compacted to meet the provider limit.]\n\n";
+  const retained = limit - marker.length;
+  const headLength = Math.ceil(retained * 0.7);
+  return `${value.slice(0, headLength)}${marker}${value.slice(-(retained - headLength))}`;
 }
 
 interface AspectRatio {
@@ -138,7 +150,7 @@ const geminiAspectRatios: AspectRatio[] = [
 
 function getModelAspectRatio(model: string, params?: Record<string, string>) {
   const ratio = parseAspectRatio(params);
-  if (model !== "gpt-image-2") return nearestAspectRatio(ratio, geminiAspectRatios);
+  if (!isGptImageModel(model)) return nearestAspectRatio(ratio, geminiAspectRatios);
 
   const value = ratio.width / ratio.height;
   if (value > 3) return { width: 3, height: 1, label: "3:1" };
@@ -236,8 +248,12 @@ function isGeminiImageModel(model: string) {
   return model.startsWith("gemini-");
 }
 
+function isGptImageModel(model: string) {
+  return model === "gpt-image-2" || model === "gpt-image-2.5-flare" || model === "gpt-image-2.5-sunburst";
+}
+
 function getAdapterName(model: string) {
-  if (model === "gpt-image-2") return "gpt-image-2";
+  if (isGptImageModel(model)) return "gpt-image-2";
   if (model === "gemini-3.1-flash-image") return "gemini-3.1-flash-image";
   if (model === "gemini-3.1-flash-image-preview") return "gemini-3.1-flash-image-preview";
   if (model === "gemini-3.1-flash-lite-image") return "gemini-3.1-flash-lite-image";
@@ -486,7 +502,7 @@ class AiProviderError extends Error {
 
 async function buildGptImage2Submit(context: SubmitContext): Promise<AsyncSubmit> {
   const size = getGptSize(context.params);
-  const quality = getQuality(context.params?.quality);
+  const quality = getQuality(context.params?.quality, context.model);
   const images = await Promise.all(context.imageSources.map((image) => imageSourceForTask(image)));
   const input: Record<string, unknown> = {
     prompt: context.prompt,
@@ -616,6 +632,51 @@ async function executeAgnesGeneration(settings: ApiSettings, context: SubmitCont
   }
 
   throw new AiProviderError(lastError || "Agnes API 暂时没有可用部署，请稍后重试。", lastStatus, { ...debug, attempts: 3 }, { responseContentType: lastContentType });
+}
+
+async function gptImageSourceBlob(value: string) {
+  const source = await imageSourceForTask(value);
+  const data = dataUrlToImageData(source);
+  if (data) return new Blob([Buffer.from(data.data, "base64")], { type: data.mimeType });
+  const response = await fetch(assertSafeRemoteFetchUrl(source), { signal: AbortSignal.timeout(60000) });
+  if (!response.ok) throw new Error(`读取参考图片失败：${response.status}`);
+  return response.blob();
+}
+
+async function executeGptImageGeneration(settings: ApiSettings, context: SubmitContext, expectedCount: number): Promise<AsyncGenerationResult> {
+  const hasImages = context.imageSources.length > 0;
+  const endpoint = `${withV1BaseUrl(settings.baseUrl)}/images/${hasImages ? "edits" : "generations"}`;
+  const quality = getQuality(context.params?.quality, context.model);
+  const size = getGptSize(context.params);
+  const debug = { endpoint, imageCount: context.imageSources.length, mode: "gpt-image-sync", model: context.model, n: context.n, quality, size };
+  let body: BodyInit;
+  let headers: HeadersInit = { Authorization: `Bearer ${settings.apiKey}` };
+
+  if (hasImages) {
+    const form = new FormData();
+    form.append("model", context.model);
+    form.append("prompt", context.prompt);
+    form.append("n", String(context.n));
+    form.append("size", size);
+    form.append("quality", quality);
+    form.append("response_format", "url");
+    const blobs = await Promise.all(context.imageSources.map((source) => gptImageSourceBlob(source)));
+    blobs.forEach((blob, index) => form.append("image[]", blob, `reference-${index + 1}.${blob.type === "image/jpeg" ? "jpg" : blob.type === "image/webp" ? "webp" : "png"}`));
+    body = form;
+  } else {
+    headers = { ...headers, "Content-Type": "application/json" };
+    body = JSON.stringify({ model: context.model, prompt: context.prompt, n: context.n, quality, response_format: "url", size });
+  }
+
+  const response = await fetch(endpoint, { body, headers, method: "POST", signal: AbortSignal.timeout(generationTimeoutMs) });
+  if (!response.ok) {
+    const error = await readProviderError(response);
+    throw new AiProviderError(error, response.status, debug, { responseContentType: response.headers.get("content-type") });
+  }
+  const { payload, contentType } = await readProviderPayload(response);
+  const images = normalizeImages(payload, expectedCount);
+  if (!images.length) throw new AiProviderError("GPT Image 接口没有返回图片。", 502, debug, { responseContentType: contentType, responseKeys: getResponseKeys(payload) });
+  return { debug, imageCount: images.length, images, responseContentType: contentType, responseKeys: getResponseKeys(payload), responseStatus: response.status };
 }
 
 async function executeGeminiNativeGeneration(settings: ApiSettings, context: SubmitContext, expectedCount: number): Promise<AsyncGenerationResult> {
@@ -1162,7 +1223,8 @@ export async function POST(request: NextRequest) {
 
     const n = getImageCount(body.params?.imageCount);
     const equalGridPanelConstraint = buildEqualGridPanelConstraint(body.params);
-    const requestPrompt = equalGridPanelConstraint ? `${prompt}\n\n${equalGridPanelConstraint}` : prompt;
+    const rawRequestPrompt = equalGridPanelConstraint ? `${prompt}\n\n${equalGridPanelConstraint}` : prompt;
+    const requestPrompt = isGptImageModel(model) ? fitGptImagePrompt(rawRequestPrompt) : rawRequestPrompt;
     const context: SubmitContext = {
       imageSources,
       model,
@@ -1173,6 +1235,12 @@ export async function POST(request: NextRequest) {
     };
 
     if (body.mode === "submit") {
+      if (isGptImageModel(model)) {
+        const result = await executeGptImageGeneration(settings, context, n);
+        const backup = await persistGeneratedImages(result.images, []);
+        await writeDebug({ at: new Date().toISOString(), backupSaved: backup.saved, debug: result.debug, imageCount: result.imageCount, responseContentType: result.responseContentType, responseKeys: result.responseKeys, responseStatus: result.responseStatus });
+        return NextResponse.json({ debug: { ...result.debug, backupSaved: backup.saved }, images: backup.images, status: "completed" });
+      }
       if (isAgnesImageModel(model) || (isGeminiImageModel(model) && !is12AiBaseUrl(settings.baseUrl))) {
         return NextResponse.json({ error: "当前模型暂不支持异步任务模式。" }, { status: 400 });
       }

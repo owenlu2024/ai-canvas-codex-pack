@@ -102,7 +102,7 @@ function isDirectGeminiImageModel(model?: unknown) {
 }
 
 function isDirectGptImageModel(model?: unknown) {
-  return model === "gpt-image-2";
+  return model === "gpt-image-2" || model === "gpt-image-2.5-flare" || model === "gpt-image-2.5-sunburst";
 }
 
 function getDirectImageCount(value?: string) {
@@ -122,36 +122,6 @@ function getDirectGeminiImageSize(params?: Record<string, string>) {
   }
   const value = params?.resolution ?? "1K";
   return ["512", "1K", "2K", "4K"].includes(value) ? value : "1K";
-}
-
-function getDirectQuality(value?: string) {
-  const normalized = (value ?? "Auto").toLowerCase();
-  if (["low", "medium", "high"].includes(normalized)) return normalized;
-  return "auto";
-}
-
-function getDirectGptSize(params?: Record<string, string>) {
-  const targetWidth = Number.parseInt(params?.targetWidth ?? "", 10);
-  const targetHeight = Number.parseInt(params?.targetHeight ?? "", 10);
-  if (Number.isFinite(targetWidth) && Number.isFinite(targetHeight) && targetWidth > 0 && targetHeight > 0) {
-    const maxEdge = 3840;
-    const maxPixels = 8294400;
-    const edgeScale = Math.min(1, maxEdge / Math.max(targetWidth, targetHeight));
-    const pixelScale = Math.min(1, Math.sqrt(maxPixels / (targetWidth * targetHeight)));
-    const scale = Math.min(edgeScale, pixelScale);
-    const toMultipleOf16 = (value: number) => Math.max(64, Math.floor(value * scale / 16) * 16);
-    return `${toMultipleOf16(targetWidth)}x${toMultipleOf16(targetHeight)}`;
-  }
-  const resolution = params?.resolution ?? "1K";
-  const ratioLabel = getDirectGeminiAspectRatio(params);
-  const [ratioWidth, ratioHeight] = ratioLabel.split(":").map(Number);
-  const ratioValue = ratioWidth / ratioHeight;
-  const isSquare = ratioWidth === ratioHeight;
-  const longEdge = resolution === "4K" ? 3840 : resolution === "2K" ? 2048 : isSquare ? 1024 : 1536;
-  const width = ratioValue >= 1 ? longEdge : Math.round(longEdge * ratioValue);
-  const height = ratioValue >= 1 ? Math.round(longEdge / ratioValue) : longEdge;
-  const toMultipleOf16 = (value: number) => Math.max(64, Math.floor(value / 16) * 16);
-  return `${toMultipleOf16(width)}x${toMultipleOf16(height)}`;
 }
 
 function getDirectGeminiAspectRatio(params?: Record<string, string>) {
@@ -276,59 +246,14 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
   const apiKey = settings?.apiKey?.trim() ?? "";
   const baseUrl = settings?.baseUrl?.trim() || "https://cdn.12ai.org";
   if (body.mode !== "submit" || (!isDirectGeminiImageModel(model) && !isDirectGptImageModel(model)) || !apiKey || !is12AiDirectBaseUrl(baseUrl)) return null;
+  // GPT Image 的完整 quality 档位由 /v1/images/* 同步接口提供，交给同源服务端代理处理。
+  if (isDirectGptImageModel(model)) return null;
 
   const params = body.params as Record<string, string> | undefined;
   const prompt = typeof body.prompt === "string" ? body.prompt : "";
   const images = Array.isArray(body.images) ? body.images.filter((image): image is string => typeof image === "string" && Boolean(image)) : [];
   const expectedCount = getDirectImageCount(params?.imageCount);
   const v1BaseUrl = normalizeDirect12AiBaseUrl(baseUrl);
-
-  if (isDirectGptImageModel(model)) {
-    const input: Record<string, unknown> = {
-      prompt,
-      quality: getDirectQuality(params?.quality),
-      response_format: "url",
-      size: getDirectGptSize(params)
-    };
-    if (images.length) input.images = images;
-    if (expectedCount > 1) input.n = expectedCount;
-    const response = await fetch(`${v1BaseUrl}/task/submit`, {
-      body: JSON.stringify({ input, model }),
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      method: "POST",
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error(await readDirect12AiError(response));
-    let taskPayload = await readDirect12AiPayload(response);
-    const taskId = getDirectTaskId(taskPayload);
-    if (!taskId) throw new Error("12AI 没有返回任务 ID。");
-
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < hostedImageGenerationMaxWaitMs) {
-      await delay(hostedImageGenerationPollMs, controller.signal);
-      const taskResponse = await fetch(`${v1BaseUrl}/task/${encodeURIComponent(taskId)}`, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        method: "GET",
-        signal: controller.signal
-      });
-      if (!taskResponse.ok) throw new Error(await readDirect12AiError(taskResponse));
-      taskPayload = await readDirect12AiPayload(taskResponse);
-      const status = getDirectTaskStatus(taskPayload);
-      const taskImages = normalizeDirectTaskOutputs(taskPayload, expectedCount);
-      if (["completed", "partial_completed"].includes(status)) {
-        if (taskImages.length) return taskImages;
-        throw new Error(getDirectTaskError(taskPayload) || "12AI 任务已结束，但 outputs 没有返回图片。");
-      }
-      if (status === "failed") throw new Error(getDirectTaskError(taskPayload) || "12AI 任务失败。");
-    }
-    throw new Error("12AI 生成超过 30 分钟仍未返回图片。");
-  }
 
   const submitEndpoint = `${v1BaseUrl}/task/submit`;
   const input: Record<string, unknown> = {
@@ -442,10 +367,16 @@ async function verifyGeneratedImagesReady(images: Array<{ url: string }>, contro
 async function requestGeneratedImagesOnce(body: Record<string, unknown>, controller: AbortController) {
   const aiSettings = body.aiSettings as ReturnType<typeof getClientAiSettingsPayload>;
   const rawModel = typeof body.model === "string" ? body.model : "";
+  const baseModel = getBaseModelId(rawModel);
+  const rawPrompt = typeof body.prompt === "string" ? body.prompt : "";
+  const providerPrompt = isDirectGptImageModel(baseModel) && rawPrompt.length > 31800
+    ? compactConnectedPromptOnly(rawPrompt, 31800)
+    : rawPrompt;
   const requestBody = {
     ...body,
     aiSettings: aiSettings ? { ...aiSettings, settings: getApiSettingsForModel(aiSettings, rawModel) ?? aiSettings.settings } : aiSettings,
-    model: getBaseModelId(rawModel)
+    model: baseModel,
+    prompt: providerPrompt
   };
   try {
     const directImages = await requestDirect12AiGeneratedImages(requestBody, controller);
@@ -1633,7 +1564,7 @@ function buildProductRetouchPrompt(userPrompt: string, params: Record<string, st
     `Verify that background and lighting references influenced only their assigned attributes, the selected attraction-light principle is physically correct, studio lighting is independent, exactly one unchanged product remains, the selected Product position (${productPosition}) and cast-shadow behavior are correct, and there is no halo, glue edge, unintended floating gap, duplicate, invented light source, or unrequested insect/effect.`,
     "Return only the finished commercial product retouch image."
   ].join("\n\n");
-  if (getBaseModelId(modelId) !== "gpt-image-2") return `${fixedBefore}\n\n${userPrompt.trim()}\n\n${fixedAfter}`;
+  if (!isDirectGptImageModel(getBaseModelId(modelId))) return `${fixedBefore}\n\n${userPrompt.trim()}\n\n${fixedAfter}`;
   const maxPromptLength = 27500;
   const connectedBudget = Math.max(0, maxPromptLength - fixedBefore.length - fixedAfter.length - 4);
   return `${fixedBefore}\n\n${compactConnectedPromptOnly(userPrompt, connectedBudget)}\n\n${fixedAfter}`;
@@ -3700,12 +3631,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               ? buildGenerateImageReferenceManifest(referenceImages)
           : "";
     const requestPrompt = referenceManifest ? `${referenceManifest}\n\n${prompt}` : prompt;
-    if (isProductRetouchNode && getBaseModelId(modelId) === "gpt-image-2" && requestPrompt.length > 31800) {
-      set((state) => ({
-        nodes: state.nodes.map((node) => (node.id === id && node.data.generationId === generationId ? { ...node, data: { ...node.data, errorMessage: "当前 Prompt 超过 gpt-image-2 的长度限制。系统已完整保留精修预设规则，请精简前置 Prompt 后重新运行。", generationId: undefined, runState: "failed" as const } } : node))
-      }));
-      return;
-    }
     const promptResolution = isTextImageLayoutNode ? parsePromptResolution(rolePrompt) : null;
     const baseRequestParams = isProductRemixNode
       ? { ...(source.data.modelParams ?? {}), imageCount: "1" }
