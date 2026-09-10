@@ -246,7 +246,7 @@ async function requestDirect12AiGeneratedImages(body: Record<string, unknown>, c
   const apiKey = settings?.apiKey?.trim() ?? "";
   const baseUrl = settings?.baseUrl?.trim() || "https://cdn.12ai.org";
   if (body.mode !== "submit" || (!isDirectGeminiImageModel(model) && !isDirectGptImageModel(model)) || !apiKey || !is12AiDirectBaseUrl(baseUrl)) return null;
-  // GPT Image 的完整 quality 档位由 /v1/images/* 同步接口提供，交给同源服务端代理处理。
+  // GPT Image 通过同源服务端代理提交异步任务，避免在浏览器暴露密钥并统一轮询规则。
   if (isDirectGptImageModel(model)) return null;
 
   const params = body.params as Record<string, string> | undefined;

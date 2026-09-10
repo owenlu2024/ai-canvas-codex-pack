@@ -54,6 +54,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as CacheGeneratedImagesRequest;
     const images = (body.images ?? []).slice(0, 8);
     if (!images.length) return NextResponse.json({ error: "没有需要保存的图片。" }, { status: 400 });
+    // 网页版不在 Vercel 临时文件系统中保存返图，直接把上游地址交给用户浏览器。
+    // 本地开发环境仍沿用原有下载、完整性检查和本机备份逻辑。
+    if (process.env.VERCEL) {
+      const remoteImages = images
+        .map((image) => ({ url: image.url?.trim() ?? "" }))
+        .filter((image) => /^https?:\/\//i.test(image.url) || image.url.startsWith("data:image/"));
+      if (remoteImages.length !== images.length) {
+        return NextResponse.json({ error: "AI 服务返回了无效的图片地址。" }, { status: 502 });
+      }
+      return NextResponse.json({ cached: 0, images: remoteImages });
+    }
+
     const directory = getCanvasDataPath("generated-images");
     const sourceTag = (body.sourceNodeId ?? "generated").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80) || "generated";
     const createdAt = Date.now();
