@@ -815,6 +815,10 @@ function generatedImageExtension(contentType: string) {
 }
 
 async function persistGeneratedImages(images: Array<{ url: string }>, taskIds: string[]) {
+  // Vercel 的文件系统是临时且不在实例之间共享的。网页版只把上游图片地址
+  // 返回给用户浏览器，本地运行时才把返图备份到本机数据目录。
+  if (process.env.VERCEL) return { images, saved: 0 };
+
   const directory = getCanvasDataPath("generated-images");
   let saved = 0;
   const persisted = await Promise.all(images.map(async (image, index) => {
@@ -1235,12 +1239,6 @@ export async function POST(request: NextRequest) {
     };
 
     if (body.mode === "submit") {
-      if (isGptImageModel(model)) {
-        const result = await executeGptImageGeneration(settings, context, n);
-        const backup = await persistGeneratedImages(result.images, []);
-        await writeDebug({ at: new Date().toISOString(), backupSaved: backup.saved, debug: result.debug, imageCount: result.imageCount, responseContentType: result.responseContentType, responseKeys: result.responseKeys, responseStatus: result.responseStatus });
-        return NextResponse.json({ debug: { ...result.debug, backupSaved: backup.saved }, images: backup.images, status: "completed" });
-      }
       if (isAgnesImageModel(model) || (isGeminiImageModel(model) && !is12AiBaseUrl(settings.baseUrl))) {
         return NextResponse.json({ error: "当前模型暂不支持异步任务模式。" }, { status: 400 });
       }
